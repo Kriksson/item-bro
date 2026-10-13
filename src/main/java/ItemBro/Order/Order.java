@@ -1,7 +1,7 @@
-package Orders;
+package ItemBro.Order;
 
-import Games.Game;
-import Users.User;
+import ItemBro.Game.Game;
+import ItemBro.User.User;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;

@@ -1,8 +1,10 @@
-package Advices;
+package ItemBro.Advice;
 
-import Games.Game;
-import Users.User;
+import ItemBro.Game.Game;
+import ItemBro.User.User;
 import jakarta.persistence.*;
+
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "advices")
@@ -22,11 +24,15 @@ public class Advice {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
+    @Column(name = "price", nullable = false)
+    private BigDecimal price;
+
     protected Advice() {}
-    public Advice(String name, Game game, User seller) {
+    public Advice(String name, Game game, User seller, BigDecimal price) {
         this.name = name;
         this.game = game;
         this.seller = seller;
+        this.price = price;
     }
 
     public Long getId() {
@@ -44,5 +50,9 @@ public class Advice {
 
     public User getSeller() {
         return seller;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
     }
 }

@@ -1,4 +1,4 @@
-package Games;
+package ItemBro.Game;
 
 import jakarta.persistence.*;
 

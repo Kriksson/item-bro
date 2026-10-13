@@ -1,0 +1,58 @@
+package ItemBro.Security;
+
+import ItemBro.Exception.UserNotFoundException;
+import ItemBro.User.User;
+import ItemBro.User.UserRepository;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Optional;
+
+@Configuration
+public class SecuritySettings {
+
+    private final UserRepository userRepository;
+    public SecuritySettings(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    UserDetailsService userDetailsService() {
+        return username -> {
+            Optional<User> u = userRepository.findByUsername(username);
+            if (u.isPresent()) {
+                User user = u.get();
+                return org.springframework.security.core.userdetails.User.withUsername(user.getUsername())
+                        .password(passwordEncoder().encode(user.getPasswordHash()))
+                        .build();
+            } else {
+                throw new UserNotFoundException("User not found");
+            }
+        };
+    }
+
+    @Bean
+    SecurityFilterChain access(HttpSecurity http) throws Exception {
+        return http
+                .csrf(Customizer.withDefaults())
+                .authorizeHttpRequests(rules -> rules
+                        .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
+                        .anyRequest().permitAll())
+                .httpBasic(Customizer.withDefaults())
+                .build();
+    }
+}

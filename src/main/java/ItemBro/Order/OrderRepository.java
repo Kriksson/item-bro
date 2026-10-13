@@ -1,4 +1,4 @@
-package Orders;
+package ItemBro.Order;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
