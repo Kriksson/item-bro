@@ -1,10 +1,7 @@
 package ItemBro.Advice;
 
 import ItemBro.Advice.DTO.AdviceBody;
-import ItemBro.Exception.AdviceNotFoundException;
-import ItemBro.Exception.GameNotFountException;
-import ItemBro.Exception.UserLimitAdviceException;
-import ItemBro.Exception.UserNotFoundException;
+import ItemBro.Exception.*;
 import ItemBro.Game.Game;
 import ItemBro.Game.GameRepository;
 import ItemBro.User.User;
@@ -12,6 +9,7 @@ import ItemBro.User.UserRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Service;
 
+import javax.naming.NoPermissionException;
 import java.security.Principal;
 import java.util.Objects;
 import java.util.Optional;
@@ -60,6 +58,8 @@ public class AdviceService {
                 User user = u.get();
                 if (Objects.equals(user.getId(), advice.getSeller().getId())) {
                     adviceRepository.delete(advice);
+                } else {
+                    throw new NoPermissionsException("No permissions");
                 }
             } else {
                 throw new UserNotFoundException("User not found");
