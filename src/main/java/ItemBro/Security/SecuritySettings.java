@@ -30,13 +30,13 @@ public class SecuritySettings {
     }
 
     @Bean
-    UserDetailsService userDetailsService() {
+    UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
         return username -> {
             Optional<User> u = userRepository.findByUsername(username);
             if (u.isPresent()) {
                 User user = u.get();
                 return org.springframework.security.core.userdetails.User.withUsername(user.getUsername())
-                        .password(passwordEncoder().encode(user.getPasswordHash()))
+                        .password(user.getPasswordHash())
                         .build();
             } else {
                 throw new UserNotFoundException("User not found");
@@ -50,7 +50,9 @@ public class SecuritySettings {
                 .csrf(Customizer.withDefaults())
                 .authorizeHttpRequests(rules -> rules
                         .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
                         .anyRequest().permitAll())
                 .httpBasic(Customizer.withDefaults())
                 .build();
