@@ -53,6 +53,8 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/orders/create").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/{id}").authenticated()
                         .anyRequest().permitAll())
                 .httpBasic(Customizer.withDefaults())
                 .build();

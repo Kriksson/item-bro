@@ -18,10 +18,8 @@ public class AdviceController {
 
     @PostMapping("/api/advices")
     public ResponseEntity<AdviceDTO> createAdvice(@Valid @RequestBody AdviceBody adviceBody, Principal principal) {
-        Advice adviceFromService = adviceService.createAdvice(adviceBody, principal);
-        AdviceDTO adviceDTO = new AdviceDTO(adviceFromService.getName(),
-                adviceBody.game_id(), adviceFromService.getSeller().getId(), adviceFromService.getPrice());
-        URI location = URI.create("api/advices/"+adviceFromService.getId());
+        AdviceDTO adviceDTO = adviceService.createAdvice(adviceBody, principal);
+        URI location = URI.create("api/advices/"+adviceDTO.id());
         return ResponseEntity.created(location).body(adviceDTO);
     }
 

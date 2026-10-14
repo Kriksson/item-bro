@@ -3,6 +3,7 @@ package ItemBro.User;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users")
@@ -11,6 +12,10 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @Column(name = "username", nullable = false, length = 20)
     private String username;
@@ -42,5 +47,21 @@ public class User {
 
     public BigDecimal getBalance() {
         return balance;
+    }
+
+    public void setBalance(BigDecimal balance) {
+        this.balance = balance;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof User user)) return false;
+        return getId() != null && getId().equals(user.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return User.class.hashCode();
     }
 }

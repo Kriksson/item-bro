@@ -2,6 +2,7 @@ package ItemBro.Exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -37,5 +38,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleNoPermissionsException(NoPermissionsException ex) {
         ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.FORBIDDEN);
+    }
+    @ExceptionHandler(InsufficientBalanceException.class)
+    public ResponseEntity<ApiError> handleInsufficientBalanceException(InsufficientBalanceException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiError> handleOrderNotFoundException(OrderNotFoundException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.NOT_FOUND);
+    }
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> handleObjectOptimisticLockingFailure(ObjectOptimisticLockingFailureException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
 }

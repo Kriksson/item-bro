@@ -1,5 +1,6 @@
 package ItemBro.Order;
 
+import ItemBro.Advice.Advice;
 import ItemBro.Game.Game;
 import ItemBro.User.User;
 import jakarta.persistence.*;
@@ -13,12 +14,13 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", length = 50, nullable = false)
-    private String name;
+    @ManyToOne
+    @JoinColumn(name = "advice_id")
+    private Advice advice;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "game_id", nullable = false)
-    private Game game;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private OrderStatus status;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "buyer_id", nullable = false)
@@ -32,24 +34,20 @@ public class Order {
     private BigDecimal price;
 
     protected Order() {}
-    public Order(String name, Game game, User buyer, User seller, BigDecimal price) {
-        this.name = name;
-        this.game = game;
+    public Order(Advice advice, User buyer, User seller, BigDecimal price, OrderStatus status) {
+        this.advice = advice;
         this.buyer = buyer;
         this.seller = seller;
         this.price = price;
+        this.status = status;
     }
 
     public Long getId() {
         return id;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public Game getGame() {
-        return game;
+    public Advice getAdvice() {
+        return advice;
     }
 
     public User getBuyer() {
@@ -62,5 +60,9 @@ public class Order {
 
     public BigDecimal getPrice() {
         return price;
+    }
+
+    public OrderStatus getStatus() {
+        return status;
     }
 }

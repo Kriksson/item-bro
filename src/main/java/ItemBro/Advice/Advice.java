@@ -27,12 +27,17 @@ public class Advice {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private AdviceStatus status;
+
     protected Advice() {}
-    public Advice(String name, Game game, User seller, BigDecimal price) {
+    public Advice(String name, Game game, User seller, BigDecimal price, AdviceStatus status) {
         this.name = name;
         this.game = game;
         this.seller = seller;
         this.price = price;
+        this.status = status;
     }
 
     public Long getId() {
@@ -55,4 +60,8 @@ public class Advice {
     public BigDecimal getPrice() {
         return price;
     }
+
+    public AdviceStatus getStatus() { return status; }
+
+    public void setStatus(AdviceStatus status) { this.status = status; }
 }
