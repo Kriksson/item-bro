@@ -33,6 +33,10 @@ public class Order {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     protected Order() {}
     public Order(Advice advice, User buyer, User seller, BigDecimal price, OrderStatus status) {
         this.advice = advice;
@@ -64,5 +68,9 @@ public class Order {
 
     public OrderStatus getStatus() {
         return status;
+    }
+
+    public void setStatus(OrderStatus status) {
+        this.status = status;
     }
 }

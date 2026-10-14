@@ -17,7 +17,7 @@ public class OrderController {
         this.orderService = orderService;
     }
 
-    @PostMapping("/api/orders/create")
+    @PostMapping("/api/orders/")
     public ResponseEntity<OrderDTO> createOrder(@Valid @RequestBody AdviceIdBody adviceIdBody, Principal principal) {
         OrderDTO orderDTO = orderService.createOrder(principal, adviceIdBody.id());
         URI location = URI.create("/api/orders/"+orderDTO.id());
@@ -28,5 +28,10 @@ public class OrderController {
     public ResponseEntity<OrderDTO> getOrderById(Principal principal, @PathVariable("id") Long id) {
         OrderDTO orderDTO = orderService.getOrderById(principal, id);
         return ResponseEntity.ok(orderDTO);
+    }
+    @PatchMapping("/api/orders/{id}")
+    public ResponseEntity<Void> cancelOrder(Principal principal, @PathVariable("id") Long id) {
+        orderService.cancelOrder(principal, id);
+        return ResponseEntity.noContent().build();
     }
 }
