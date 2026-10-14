@@ -122,4 +122,30 @@ public class OrderService {
         userBuyer.setBalance(newUserBuyerBalance);
         order.setStatus(OrderStatus.REFUND);
     }
+
+    @Transactional
+    public void confirmOrder(Principal principal, Long orderId) {
+        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<User> u = userRepository.findByUsername(principal.getName());
+        if (o.isEmpty()) throw new OrderNotFoundException("Order not found");
+        if (u.isEmpty()) throw new UserNotFoundException("User not found");
+
+        Order order = o.get();
+        User userFromRequest = u.get();
+        BigDecimal price = order.getPrice();
+        OrderStatus  orderStatus = order.getStatus();
+
+        User userSeller =  order.getSeller();
+        User userBuyer =  order.getBuyer();
+        if (!(Objects.equals(userFromRequest.getId(), userBuyer.getId())))
+            throw new NoPermissionsException("No have permissions");
+
+        if (orderStatus != OrderStatus.OPENED) throw new OrderNotOpenedException("order not open");
+
+        BigDecimal sellerBalance =  userSeller.getBalance();
+        BigDecimal newUserSellerBalance =  sellerBalance.add(price);
+
+        userSeller.setBalance(newUserSellerBalance);
+        order.setStatus(OrderStatus.CLOSED);
+    }
 }

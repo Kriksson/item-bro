@@ -55,7 +55,8 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders/").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/orders/{id}").authenticated()
-                        .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/cancel").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/confirm").authenticated()
                         .anyRequest().permitAll())
                 .httpBasic(Customizer.withDefaults())
                 .build();

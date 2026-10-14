@@ -29,9 +29,15 @@ public class OrderController {
         OrderDTO orderDTO = orderService.getOrderById(principal, id);
         return ResponseEntity.ok(orderDTO);
     }
-    @PatchMapping("/api/orders/{id}")
+    @PatchMapping("/api/orders/{id}/cancel")
     public ResponseEntity<Void> cancelOrder(Principal principal, @PathVariable("id") Long id) {
         orderService.cancelOrder(principal, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/orders/{id}/confirm")
+    public ResponseEntity<Void> confirmOrder(Principal principal, @PathVariable("id") Long id) {
+        orderService.confirmOrder(principal, id);
         return ResponseEntity.noContent().build();
     }
 }
