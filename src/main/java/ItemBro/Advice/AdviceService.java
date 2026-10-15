@@ -10,6 +10,7 @@ import ItemBro.Game.GameRepository;
 import ItemBro.User.DTO.UserSellerDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
+import ItemBro.User.UserRole;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -72,7 +73,10 @@ public class AdviceService {
                 if (Objects.equals(user.getId(), advice.getSeller().getId())) {
                     advice.setStatus(AdviceStatus.ARCHIVED);
                 } else {
-                    throw new NoPermissionsException("No permissions");
+                    if (user.getRole() != UserRole.ADMIN) {
+                        throw new NoPermissionsException("No permissions");
+                    }
+                    advice.setStatus(AdviceStatus.ARCHIVED);
                 }
             } else {
                 throw new UserNotFoundException("User not found");

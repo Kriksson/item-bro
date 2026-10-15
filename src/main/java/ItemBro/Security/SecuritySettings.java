@@ -37,6 +37,7 @@ public class SecuritySettings {
                 User user = u.get();
                 return org.springframework.security.core.userdetails.User.withUsername(user.getUsername())
                         .password(user.getPasswordHash())
+                        .roles(user.getRole().toString())
                         .build();
             } else {
                 throw new UserNotFoundException("User not found");

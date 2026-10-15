@@ -12,6 +12,7 @@ import ItemBro.User.DTO.UserBuyerDTO;
 import ItemBro.User.DTO.UserSellerDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
+import ItemBro.User.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -88,7 +89,9 @@ public class OrderService {
 
         if ( !(Objects.equals(userFromRequest.getId(), userBuyer.getId())
                 || Objects.equals(userFromRequest.getId(), userSeller.getId()))) {
-            throw new NoPermissionsException("No have permissions");
+            if(userFromRequest.getRole() != UserRole.ADMIN) {
+                throw new NoPermissionsException("No have permissions");
+            }
         }
 
         UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer.getUsername());
@@ -113,8 +116,11 @@ public class OrderService {
 
         User userSeller =  order.getSeller();
         User userBuyer =  order.getBuyer();
-        if (!(Objects.equals(userFromRequest.getId(), userSeller.getId())))
-            throw new NoPermissionsException("No have permissions");
+        if (!(Objects.equals(userFromRequest.getId(), userSeller.getId()))) {
+            if(userFromRequest.getRole() != UserRole.ADMIN) {
+                throw new NoPermissionsException("No have permissions");
+            }
+        }
 
         if (orderStatus != OrderStatus.OPENED) throw new OrderNotOpenedException("order not open");
 
@@ -139,8 +145,11 @@ public class OrderService {
 
         User userSeller =  order.getSeller();
         User userBuyer =  order.getBuyer();
-        if (!(Objects.equals(userFromRequest.getId(), userBuyer.getId())))
-            throw new NoPermissionsException("No have permissions");
+        if (!(Objects.equals(userFromRequest.getId(), userBuyer.getId()))) {
+            if(userFromRequest.getRole() != UserRole.ADMIN) {
+                throw new NoPermissionsException("No have permissions");
+            }
+        }
 
         if (orderStatus != OrderStatus.OPENED) throw new OrderNotOpenedException("order not open");
 
@@ -163,8 +172,11 @@ public class OrderService {
 
         User buyerUser =  order.getBuyer();
 
-        if (!(Objects.equals(userFromRequest.getId(), buyerUser.getId())))
-            throw new NoPermissionsException("No have permissions");
+        if (!(Objects.equals(userFromRequest.getId(), buyerUser.getId()))) {
+            if(userFromRequest.getRole() != UserRole.ADMIN) {
+                throw new NoPermissionsException("No have permissions");
+            }
+        }
 
         order.setRating(rating);
         order.setFeedback(feedbackText);
@@ -182,8 +194,11 @@ public class OrderService {
 
         User userSeller = order.getSeller();
 
-        if (!(Objects.equals(userFromRequest.getId(), userSeller.getId())))
-            throw new NoPermissionsException("No have permissions");
+        if (!(Objects.equals(userFromRequest.getId(), userSeller.getId()))) {
+            if(userFromRequest.getRole() != UserRole.ADMIN) {
+                throw new NoPermissionsException("No have permissions");
+            }
+        }
 
         if (order.getRating() == -1) throw new FeedbackNotCreatedException("Feedback not created");
 

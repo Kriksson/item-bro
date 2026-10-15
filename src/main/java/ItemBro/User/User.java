@@ -26,6 +26,10 @@ public class User {
     @Column(name = "balance", nullable = false)
     private BigDecimal balance;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 30)
+    private UserRole role = UserRole.USER;
+
     protected User() {}
     public User(String username, String passwordHash, BigDecimal balance) {
         this.username = username;
@@ -47,6 +51,14 @@ public class User {
 
     public BigDecimal getBalance() {
         return balance;
+    }
+
+    public UserRole getRole() {
+        return role;
+    }
+
+    public void setRole(UserRole role) {
+        this.role = role;
     }
 
     public void setBalance(BigDecimal balance) {
