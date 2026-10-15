@@ -52,12 +52,13 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/advices").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders/").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/orders/{id}").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/cancel").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/confirm").authenticated()
-                        .anyRequest().permitAll())
+                        .anyRequest().denyAll())
                 .httpBasic(Customizer.withDefaults())
                 .build();
     }

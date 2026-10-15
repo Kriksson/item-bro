@@ -2,6 +2,7 @@ package ItemBro.Advice;
 
 import ItemBro.Advice.DTO.AdviceBody;
 import ItemBro.Advice.DTO.AdviceDTO;
+import ItemBro.Advice.DTO.AdvicePageDTO;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,5 +28,10 @@ public class AdviceController {
     public ResponseEntity<Void> deleteAdvice(@PathVariable Long id, Principal principal) {
         adviceService.deleteAdvice(id, principal);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/advices")
+    public ResponseEntity<AdvicePageDTO> getAdvicesByGameId(@RequestParam(value = "gameId", required = true) Long gameId, @RequestParam(value = "page", required = false) Integer page) {
+        return ResponseEntity.ok(adviceService.getAdvicesByGame(gameId, page));
     }
 }

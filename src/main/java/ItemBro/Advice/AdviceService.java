@@ -2,6 +2,7 @@ package ItemBro.Advice;
 
 import ItemBro.Advice.DTO.AdviceBody;
 import ItemBro.Advice.DTO.AdviceDTO;
+import ItemBro.Advice.DTO.AdvicePageDTO;
 import ItemBro.Exception.*;
 import ItemBro.Game.DTO.GameDTO;
 import ItemBro.Game.Game;
@@ -9,6 +10,9 @@ import ItemBro.Game.GameRepository;
 import ItemBro.User.DTO.UserSellerDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,5 +80,23 @@ public class AdviceService {
         } else {
             throw new AdviceNotFoundException("Advice not found");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public AdvicePageDTO getAdvicesByGame(Long gameId, Integer page) {
+        if (!gameRepository.existsById(gameId)) throw new GameNotFountException("Game not found");
+        if (page == null) page = 0;
+        if (page < 0) throw new IllegalArgumentException();
+        Pageable request = PageRequest.of(page, 50);
+        Page<Advice> advicePage = adviceRepository.findAdviceByGame_IdAndStatusOrderByIdDesc(gameId,
+                AdviceStatus.ACTIVE, request);
+        Page<AdviceDTO> adviceDTOPage = advicePage.map(advice -> {
+            Game game = advice.getGame();
+            GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
+            UserSellerDTO userSellerDTO = new UserSellerDTO(advice.getSeller().getUsername());
+            return new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, advice.getPrice());
+        });
+        return new AdvicePageDTO(adviceDTOPage.getContent(), page, 50, adviceDTOPage.getTotalElements(),
+                adviceDTOPage.getTotalPages());
     }
 }
