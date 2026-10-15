@@ -37,6 +37,12 @@ public class Order {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    @Column(name = "rating", nullable = false)
+    private Integer rating = -1;
+
+    @Column(name = "feedback", length = 300)
+    private String feedback = null;
+
     protected Order() {}
     public Order(Advice advice, User buyer, User seller, BigDecimal price, OrderStatus status) {
         this.advice = advice;
@@ -66,8 +72,28 @@ public class Order {
         return price;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
+    public Integer getRating() {
+        return rating;
+    }
+
+    public String getFeedback() {
+        return feedback;
+    }
+
     public OrderStatus getStatus() {
         return status;
+    }
+
+    public void setRating(Integer rating) {
+        this.rating = rating;
+    }
+
+    public void setFeedback(String feedback) {
+        this.feedback = feedback;
     }
 
     public void setStatus(OrderStatus status) {

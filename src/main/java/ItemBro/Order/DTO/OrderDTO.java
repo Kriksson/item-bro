@@ -7,5 +7,5 @@ import ItemBro.User.DTO.UserSellerDTO;
 import java.math.BigDecimal;
 
 public record OrderDTO(Long id, AdviceDTO adviceDTO, UserBuyerDTO userBuyerDTO,
-                       BigDecimal price) {
+                       BigDecimal price, Integer rating, String feedbackText) {
 }

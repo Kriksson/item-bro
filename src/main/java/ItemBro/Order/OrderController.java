@@ -2,6 +2,7 @@ package ItemBro.Order;
 
 import ItemBro.Advice.DTO.AdviceIdBody;
 import ItemBro.Order.DTO.OrderDTO;
+import ItemBro.Order.DTO.OrderFeedbackBody;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,7 @@ public class OrderController {
         OrderDTO orderDTO = orderService.getOrderById(principal, id);
         return ResponseEntity.ok(orderDTO);
     }
+
     @PatchMapping("/api/orders/{id}/cancel")
     public ResponseEntity<Void> cancelOrder(Principal principal, @PathVariable("id") Long id) {
         orderService.cancelOrder(principal, id);
@@ -38,6 +40,15 @@ public class OrderController {
     @PatchMapping("/api/orders/{id}/confirm")
     public ResponseEntity<Void> confirmOrder(Principal principal, @PathVariable("id") Long id) {
         orderService.confirmOrder(principal, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/orders/{id}/feedback")
+    public ResponseEntity<Void> addFeedback(Principal principal, @PathVariable("id") Long id,
+                                         @Valid @RequestBody OrderFeedbackBody feedbackBody) {
+        Integer rating = feedbackBody.rating();
+        String feedbackText =  feedbackBody.feedbackText();
+        orderService.addFeedback(principal, id, rating, feedbackText);
         return ResponseEntity.noContent().build();
     }
 }

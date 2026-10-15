@@ -66,7 +66,7 @@ public class OrderService {
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
-        return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price);
+        return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price, -1, null);
     }
 
     @Transactional(readOnly = true)
@@ -95,7 +95,7 @@ public class OrderService {
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
-        return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price);
+        return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback());
     }
 
     @Transactional
@@ -147,5 +147,24 @@ public class OrderService {
 
         userSeller.setBalance(newUserSellerBalance);
         order.setStatus(OrderStatus.CLOSED);
+    }
+
+    @Transactional
+    public void addFeedback(Principal principal, Long orderId, Integer rating, String feedbackText) {
+        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<User> u = userRepository.findByUsername(principal.getName());
+        if (o.isEmpty()) throw new OrderNotFoundException("Order not found");
+        if (u.isEmpty()) throw new UserNotFoundException("User not found");
+
+        Order order = o.get();
+        User userFromRequest = u.get();
+
+        User buyerUser =  order.getBuyer();
+
+        if (!(Objects.equals(userFromRequest.getId(), buyerUser.getId())))
+            throw new NoPermissionsException("No have permissions");
+
+        order.setRating(rating);
+        order.setFeedback(feedbackText);
     }
 }
