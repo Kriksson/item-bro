@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN seller_response VARCHAR(300) DEFAULT NULL;

@@ -66,7 +66,8 @@ public class OrderService {
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
-        return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price, -1, null);
+        return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
+                order.getSellerResponse());
     }
 
     @Transactional(readOnly = true)
@@ -95,7 +96,8 @@ public class OrderService {
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
-        return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback());
+        return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
+                order.getSellerResponse());
     }
 
     @Transactional
@@ -166,5 +168,25 @@ public class OrderService {
 
         order.setRating(rating);
         order.setFeedback(feedbackText);
+    }
+
+    @Transactional
+    public void addSellerResponse(Principal principal, Long orderId, String sellerResponseText) {
+        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<User> u = userRepository.findByUsername(principal.getName());
+        if (o.isEmpty()) throw new OrderNotFoundException("Order not found");
+        if (u.isEmpty()) throw new UserNotFoundException("User not found");
+
+        Order order = o.get();
+        User userFromRequest = u.get();
+
+        User userSeller = order.getSeller();
+
+        if (!(Objects.equals(userFromRequest.getId(), userSeller.getId())))
+            throw new NoPermissionsException("No have permissions");
+
+        if (order.getRating() == -1) throw new FeedbackNotCreatedException("Feedback not created");
+
+        order.setSellerResponse(sellerResponseText);
     }
 }

@@ -3,6 +3,7 @@ package ItemBro.Order;
 import ItemBro.Advice.DTO.AdviceIdBody;
 import ItemBro.Order.DTO.OrderDTO;
 import ItemBro.Order.DTO.OrderFeedbackBody;
+import ItemBro.Order.DTO.OrderResponseBody;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -49,6 +50,14 @@ public class OrderController {
         Integer rating = feedbackBody.rating();
         String feedbackText =  feedbackBody.feedbackText();
         orderService.addFeedback(principal, id, rating, feedbackText);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/orders/{id}/response")
+    public ResponseEntity<Void> addSellerResponse(Principal principal, @PathVariable("id") Long id,
+                                            @Valid @RequestBody OrderResponseBody responseBody) {
+        String responseText =  responseBody.responseText();
+        orderService.addSellerResponse(principal, id, responseText);
         return ResponseEntity.noContent().build();
     }
 }

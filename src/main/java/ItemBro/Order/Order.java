@@ -43,6 +43,9 @@ public class Order {
     @Column(name = "feedback", length = 300)
     private String feedback = null;
 
+    @Column(name = "seller_response", length = 300)
+    private String sellerResponse = null;
+
     protected Order() {}
     public Order(Advice advice, User buyer, User seller, BigDecimal price, OrderStatus status) {
         this.advice = advice;
@@ -72,6 +75,10 @@ public class Order {
         return price;
     }
 
+    public String getSellerResponse() {
+        return sellerResponse;
+    }
+
     public Long getVersion() {
         return version;
     }
@@ -94,6 +101,10 @@ public class Order {
 
     public void setFeedback(String feedback) {
         this.feedback = feedback;
+    }
+
+    public void setSellerResponse(String sellerResponse) {
+        this.sellerResponse = sellerResponse;
     }
 
     public void setStatus(OrderStatus status) {
