@@ -7,6 +7,7 @@ import ItemBro.Advice.DTO.AdviceDTO;
 import ItemBro.Exception.*;
 import ItemBro.Game.DTO.GameDTO;
 import ItemBro.Game.Game;
+import ItemBro.Game.GameStatus;
 import ItemBro.Order.DTO.OrderDTO;
 import ItemBro.User.DTO.UserBuyerDTO;
 import ItemBro.User.DTO.UserSellerDTO;
@@ -46,9 +47,11 @@ public class OrderService {
         Advice advice = a.get();
         User userSeller = advice.getSeller();
         Game game =  advice.getGame();
+        GameStatus gameStatus = game.getStatus();
         ItemBro.Advice.AdviceStatus adviceStatus = advice.getStatus();
 
         if (adviceStatus == AdviceStatus.ARCHIVED) throw new AdviceNotFoundException("Advice has been deleted");
+        if (gameStatus == GameStatus.ARCHIVED) throw new GameArchivedException("game in archive");
 
         BigDecimal price = advice.getPrice();
         BigDecimal userBuyerBalance =  userBuyer.getBalance();

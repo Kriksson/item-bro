@@ -65,6 +65,7 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/confirm").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/feedback").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/response").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/games/{id}/delete").authenticated()
                         .anyRequest().denyAll())
                 .httpBasic(Customizer.withDefaults())
                 .build();

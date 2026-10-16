@@ -7,6 +7,7 @@ import ItemBro.Exception.*;
 import ItemBro.Game.DTO.GameDTO;
 import ItemBro.Game.Game;
 import ItemBro.Game.GameRepository;
+import ItemBro.Game.GameStatus;
 import ItemBro.User.DTO.UserSellerDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
@@ -45,6 +46,10 @@ public class AdviceService {
                 Optional<Game> g = gameRepository.findById(adviceBody.game_id());
                 if (g.isPresent()) {
                     Game game = g.get();
+                    GameStatus gameStatus = game.getStatus();
+
+                    if (gameStatus != GameStatus.OPENED) throw new GameArchivedException("game in archive");
+
                     Advice advice = new Advice(adviceBody.name(), game, user, adviceBody.price(), AdviceStatus.ACTIVE);
                     Advice adviceFromDB =  adviceRepository.save(advice);
                     UserSellerDTO userSellerDTO = new UserSellerDTO(user.getUsername());
@@ -88,14 +93,19 @@ public class AdviceService {
 
     @Transactional(readOnly = true)
     public AdvicePageDTO getAdvicesByGame(Long gameId, Integer page) {
-        if (!gameRepository.existsById(gameId)) throw new GameNotFountException("Game not found");
+        Optional<Game> g =  gameRepository.findById(gameId);
+        if (g.isEmpty()) throw new GameNotFountException("Game not found");
+        Game game = g.get();
+        GameStatus gameStatus = game.getStatus();
+
+        if (gameStatus != GameStatus.OPENED) throw new GameArchivedException("game in archive");
+
         if (page == null) page = 0;
         if (page < 0) throw new IllegalArgumentException();
         Pageable request = PageRequest.of(page, 50);
         Page<Advice> advicePage = adviceRepository.findAdviceByGame_IdAndStatusOrderByIdDesc(gameId,
                 AdviceStatus.ACTIVE, request);
         Page<AdviceDTO> adviceDTOPage = advicePage.map(advice -> {
-            Game game = advice.getGame();
             GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
             UserSellerDTO userSellerDTO = new UserSellerDTO(advice.getSeller().getUsername());
             return new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, advice.getPrice());

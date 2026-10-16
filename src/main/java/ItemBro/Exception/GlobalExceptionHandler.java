@@ -74,4 +74,14 @@ public class GlobalExceptionHandler {
         ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    @ExceptionHandler(GameNotOpenedException.class)
+    public ResponseEntity<ApiError> handleGameNotOpenedException(GameNotOpenedException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
+    @ExceptionHandler(GameArchivedException.class)
+    public ResponseEntity<ApiError> handleGameArchivedException(GameArchivedException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
 }

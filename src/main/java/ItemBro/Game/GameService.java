@@ -1,12 +1,11 @@
 package ItemBro.Game;
 
-import ItemBro.Exception.GameAlreadyCreatedException;
-import ItemBro.Exception.NoPermissionsException;
-import ItemBro.Exception.UserNotFoundException;
+import ItemBro.Exception.*;
 import ItemBro.Game.DTO.GameDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
 import ItemBro.User.UserRole;
+import jakarta.transaction.Transactional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -42,5 +41,26 @@ public class GameService {
             }
             throw e;
         }
+    }
+
+    @Transactional
+    public void deleteGame(Principal principal, Long gameId) {
+        Optional<User> u = userRepository.findByUsername(principal.getName());
+        if (u.isEmpty()) throw new UserNotFoundException("user not found");
+
+        User user = u.get();
+
+        if (user.getRole() != UserRole.ADMIN) throw new NoPermissionsException("no have permissions to delete game");
+
+        Optional<Game> g = gameRepository.findById(gameId);
+
+        if (g.isEmpty()) throw new GameNotFountException("game not found");
+
+        Game game = g.get();
+        GameStatus gameStatus = game.getStatus();
+
+        if (gameStatus != GameStatus.OPENED) throw new GameNotOpenedException("game not opened");
+
+        game.setStatus(GameStatus.ARCHIVED);
     }
 }

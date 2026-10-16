@@ -3,9 +3,7 @@ package ItemBro.Game;
 import ItemBro.Game.DTO.GameDTO;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.security.Principal;
@@ -23,5 +21,11 @@ public class GameController {
         GameDTO gameDTO = gameService.createGame(principal, gameBody);
         URI location = URI.create("/api/games/"+gameDTO.id());
         return ResponseEntity.created(location).body(gameDTO);
+    }
+
+    @PatchMapping("/api/games/{id}/delete")
+    public ResponseEntity<Void> patch(Principal principal, @PathVariable("id") Long id) {
+        gameService.deleteGame(principal, id);
+        return ResponseEntity.noContent().build();
     }
 }
