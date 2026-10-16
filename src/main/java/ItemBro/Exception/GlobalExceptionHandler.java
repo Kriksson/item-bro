@@ -69,4 +69,9 @@ public class GlobalExceptionHandler {
         ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    @ExceptionHandler(GameAlreadyCreatedException.class)
+    public ResponseEntity<ApiError> handleGameAlreadyCreatedException(GameAlreadyCreatedException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
 }

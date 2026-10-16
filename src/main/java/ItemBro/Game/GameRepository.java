@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface GameRepository extends JpaRepository<Game, Long> {
     Optional<Game> findById(long id);
+    boolean existsByName(String name);
 }

@@ -12,6 +12,10 @@ public class Game {
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 20, nullable = false)
+    private GameStatus status = GameStatus.OPENED;
+
     protected Game() {}
     public Game(String name) {
         this.name = name;
@@ -21,7 +25,15 @@ public class Game {
         return id;
     }
 
+    public GameStatus getStatus() {
+        return status;
+    }
+
     public String getName() {
         return name;
+    }
+
+    public void setStatus(GameStatus status) {
+        this.status = status;
     }
 }

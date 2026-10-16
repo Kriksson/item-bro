@@ -57,6 +57,7 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders/").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/games").authenticated()
 
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
 
