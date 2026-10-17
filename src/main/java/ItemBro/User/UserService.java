@@ -7,6 +7,7 @@ import ItemBro.Advice.DTO.AdviceDTO;
 import ItemBro.Exception.UserAlreadyRegisterException;
 import ItemBro.Exception.UserNotFoundException;
 import ItemBro.Game.Game;
+import ItemBro.Game.GameStatus;
 import ItemBro.Order.DTO.OrderReviewDTO;
 import ItemBro.Order.Order;
 import ItemBro.Order.OrderRepository;
@@ -82,7 +83,8 @@ public class UserService {
 
         User user = u.get();
 
-        List<Advice> adviceList = adviceRepository.findAllBySellerAndStatus(user, AdviceStatus.ACTIVE);
+        List<Advice> adviceList = adviceRepository.findAllBySellerAndStatusAndGame_Status(user, AdviceStatus.ACTIVE,
+                GameStatus.OPENED);
         return adviceList.stream()
                 .map(e -> {
                     Game game = e.getGame();
