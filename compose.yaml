@@ -11,6 +11,8 @@ services:
       DB_NAME: ${DB_NAME:-item_bro}
       DB_USER: ${DB_USER:-kriksson}
       DB_PASSWORD: ${DB_PASSWORD:-kriksson}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -32,3 +34,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

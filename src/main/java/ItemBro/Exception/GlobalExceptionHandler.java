@@ -2,9 +2,13 @@ package ItemBro.Exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.io.FileNotFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -83,5 +87,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleGameArchivedException(GameArchivedException ex) {
         ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
+    @ExceptionHandler(FileNotFoundException.class)
+    public ResponseEntity<ApiError> handleFileNotFoundException(FileNotFoundException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.NOT_FOUND);
+    }
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleMethodArgumentNotValidException(MethodArgumentNotValidException ex) {
+        ApiError apiError = new ApiError(ex.getBindingResult().getFieldError().getDefaultMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+    }
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
+        ApiError apiError = new ApiError("Некорректное тело запроса");
+        return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
     }
 }

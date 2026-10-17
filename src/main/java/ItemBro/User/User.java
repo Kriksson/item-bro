@@ -30,6 +30,19 @@ public class User {
     @Column(name = "role", nullable = false, length = 30)
     private UserRole role = UserRole.USER;
 
+    @Column(name = "avatar_url")
+    private String avatarUrl = null;
+
+    @Column(name = "age")
+    private Integer age = null;
+
+    @Column(name = "city", length = 100)
+    private String city = null;
+
+    @Column(name = "about", length = 1000)
+    private String about = null;
+
+
     protected User() {}
     public User(String username, String passwordHash, BigDecimal balance) {
         this.username = username;
@@ -57,12 +70,44 @@ public class User {
         return role;
     }
 
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public Integer getAge() {
+        return age;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getAbout() {
+        return about;
+    }
+
     public void setRole(UserRole role) {
         this.role = role;
     }
 
     public void setBalance(BigDecimal balance) {
         this.balance = balance;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public void setAge(Integer age) {
+        this.age = age;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public void setAbout(String about) {
+        this.about = about;
     }
 
     @Override

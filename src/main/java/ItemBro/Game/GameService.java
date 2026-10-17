@@ -35,7 +35,7 @@ public class GameService {
             if (user.getRole() != UserRole.ADMIN) throw new NoPermissionsException("no have permissions to create game");
             Game newGame = new Game(gameBody.name());
             Game gameFromDB = gameRepository.saveAndFlush(newGame);
-            return new GameDTO(gameFromDB.getId(), gameFromDB.getName());
+            return new GameDTO(gameFromDB);
         } catch (DataIntegrityViolationException e) {
             if (e.getCause() instanceof ConstraintViolationException violation &&
             "unique_games_name".equals(violation.getConstraintName())) {
@@ -73,7 +73,7 @@ public class GameService {
         if (games.isEmpty()) return new ArrayList<>();
 
         return games.stream()
-                .map(e -> new GameDTO(e.getId(), e.getName()))
+                .map(GameDTO::new)
                 .toList();
 
     }

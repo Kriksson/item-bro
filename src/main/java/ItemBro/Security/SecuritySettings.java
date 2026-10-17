@@ -60,6 +60,7 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.GET, "/api/games").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/orders").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/advices").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/media/{fileId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/{username}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/{username}/reviews").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/{username}/advices").permitAll()
@@ -72,12 +73,16 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.POST, "/api/games").authenticated()
 
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/user/me/avatar").authenticated()
 
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/cancel").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/confirm").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/feedback").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/response").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/games/{id}/delete").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/user/me").authenticated()
+
+                        .requestMatchers(HttpMethod.PUT, "/api/user/me/avatar").authenticated()
 
                         .requestMatchers(HttpMethod.GET, "/api/admin/orders").hasRole("ADMIN")
                         .anyRequest().denyAll())

@@ -16,6 +16,9 @@ public class Game {
     @Column(name = "status", length = 20, nullable = false)
     private GameStatus status = GameStatus.OPENED;
 
+    @Column(name = "image_url")
+    private String imageUrl = null;
+
     protected Game() {}
     public Game(String name) {
         this.name = name;
@@ -31,6 +34,14 @@ public class Game {
 
     public String getName() {
         return name;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public void setStatus(GameStatus status) {

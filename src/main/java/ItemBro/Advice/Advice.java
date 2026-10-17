@@ -31,6 +31,9 @@ public class Advice {
     @Column(name = "status", nullable = false, length = 20)
     private AdviceStatus status;
 
+    @Column(name = "image_url")
+    private String imageUrl = null;
+
     protected Advice() {}
     public Advice(String name, Game game, User seller, BigDecimal price, AdviceStatus status) {
         this.name = name;
@@ -61,7 +64,15 @@ public class Advice {
         return price;
     }
 
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
     public AdviceStatus getStatus() { return status; }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
 
     public void setStatus(AdviceStatus status) { this.status = status; }
 }

@@ -66,13 +66,7 @@ public class OrderService {
 
         Order orderFromDB = orderRepository.save(order);
 
-        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
-        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
-        GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
-        AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
-
-        return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
-                order.getSellerResponse(), orderFromDB.getStatus());
+        return new OrderDTO(orderFromDB, advice, userBuyer, userSeller, game);
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +83,6 @@ public class OrderService {
         User userFromRequest = u.get();
         User userBuyer = order.getBuyer();
         User userSeller = order.getSeller();
-        BigDecimal price = order.getPrice();
 
         if ( !(Objects.equals(userFromRequest.getId(), userBuyer.getId())
                 || Objects.equals(userFromRequest.getId(), userSeller.getId()))) {
@@ -98,13 +91,7 @@ public class OrderService {
             }
         }
 
-        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
-        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
-        GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
-        AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
-
-        return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
-                order.getSellerResponse(), order.getStatus());
+        return new OrderDTO(order, advice, userBuyer, userSeller, game);
     }
 
     @Transactional
@@ -225,10 +212,7 @@ public class OrderService {
                     User userSeller = advice.getSeller();
                     User userBuyer = e.getBuyer();
                     UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
-                    UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
-                    GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
-                    AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO,
-                            e.getPrice());
+                    AdviceDTO adviceDTO = new AdviceDTO(advice, game, userSeller);
                     return new OrderDTO(e.getId(), adviceDTO, userBuyerDTO, e.getPrice(),
                             e.getRating(), e.getFeedback(), e.getSellerResponse(), e.getStatus());
                 }).toList();
@@ -243,10 +227,7 @@ public class OrderService {
                     User userSeller = advice.getSeller();
                     User userBuyer = e.getBuyer();
                     UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
-                    UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
-                    GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
-                    AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO,
-                            e.getPrice());
+                    AdviceDTO adviceDTO = new AdviceDTO(advice, game, userSeller);
                     return new OrderDTO(e.getId(), adviceDTO, userBuyerDTO, e.getPrice(),
                             e.getRating(), e.getFeedback(), e.getSellerResponse(), e.getStatus());
                 }).toList();
