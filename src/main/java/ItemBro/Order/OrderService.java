@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.security.Principal;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -65,13 +66,13 @@ public class OrderService {
 
         Order orderFromDB = orderRepository.save(order);
 
-        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer.getUsername());
-        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller.getUsername());
+        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
+        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
         return new OrderDTO(orderFromDB.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
-                order.getSellerResponse());
+                order.getSellerResponse(), orderFromDB.getStatus());
     }
 
     @Transactional(readOnly = true)
@@ -97,13 +98,13 @@ public class OrderService {
             }
         }
 
-        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer.getUsername());
-        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller.getUsername());
+        UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
+        UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
         GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
         AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, price);
 
         return new OrderDTO(order.getId(), adviceDTO, userBuyerDTO, price, order.getRating(), order.getFeedback(),
-                order.getSellerResponse());
+                order.getSellerResponse(), order.getStatus());
     }
 
     @Transactional
@@ -206,5 +207,48 @@ public class OrderService {
         if (order.getRating() == -1) throw new FeedbackNotCreatedException("Feedback not created");
 
         order.setSellerResponse(sellerResponseText);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderDTO> getOrders(Principal principal) {
+        Optional<User> u = userRepository.findByUsername(principal.getName());
+        if (u.isEmpty()) throw new UserNotFoundException("User not found");
+
+        List<Order> orders = orderRepository.findAllByBuyerOrSeller(u.get(), u.get());
+
+        if (orders.isEmpty()) throw new OrderNotFoundException("Orders not found");
+
+        return orders.stream()
+                .map(e -> {
+                    Advice advice = e.getAdvice();
+                    Game game =  advice.getGame();
+                    User userSeller = advice.getSeller();
+                    User userBuyer = e.getBuyer();
+                    UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
+                    UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
+                    GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
+                    AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO,
+                            e.getPrice());
+                    return new OrderDTO(e.getId(), adviceDTO, userBuyerDTO, e.getPrice(),
+                            e.getRating(), e.getFeedback(), e.getSellerResponse(), e.getStatus());
+                }).toList();
+    }
+    @Transactional(readOnly = true)
+    public List<OrderDTO> getAllOrders() {
+        List<Order> orders =  orderRepository.findAll();
+        return orders.stream()
+                .map(e -> {
+                    Advice advice = e.getAdvice();
+                    Game game =  advice.getGame();
+                    User userSeller = advice.getSeller();
+                    User userBuyer = e.getBuyer();
+                    UserBuyerDTO userBuyerDTO = new UserBuyerDTO(userBuyer);
+                    UserSellerDTO userSellerDTO = new UserSellerDTO(userSeller);
+                    GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
+                    AdviceDTO adviceDTO = new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO,
+                            e.getPrice());
+                    return new OrderDTO(e.getId(), adviceDTO, userBuyerDTO, e.getPrice(),
+                            e.getRating(), e.getFeedback(), e.getSellerResponse(), e.getStatus());
+                }).toList();
     }
 }

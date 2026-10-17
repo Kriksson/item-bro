@@ -8,7 +8,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-item-bro}
+      DB_NAME: ${DB_NAME:-item_bro}
       DB_USER: ${DB_USER:-kriksson}
       DB_PASSWORD: ${DB_PASSWORD:-kriksson}
     depends_on:

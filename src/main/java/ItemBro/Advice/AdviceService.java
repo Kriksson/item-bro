@@ -52,7 +52,7 @@ public class AdviceService {
 
                     Advice advice = new Advice(adviceBody.name(), game, user, adviceBody.price(), AdviceStatus.ACTIVE);
                     Advice adviceFromDB =  adviceRepository.save(advice);
-                    UserSellerDTO userSellerDTO = new UserSellerDTO(user.getUsername());
+                    UserSellerDTO userSellerDTO = new UserSellerDTO(user);
                     GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
                     return new AdviceDTO(adviceFromDB.getId(), adviceFromDB.getName(), gameDTO,
                             userSellerDTO, adviceFromDB.getPrice());
@@ -107,7 +107,7 @@ public class AdviceService {
                 AdviceStatus.ACTIVE, request);
         Page<AdviceDTO> adviceDTOPage = advicePage.map(advice -> {
             GameDTO gameDTO = new GameDTO(game.getId(), game.getName());
-            UserSellerDTO userSellerDTO = new UserSellerDTO(advice.getSeller().getUsername());
+            UserSellerDTO userSellerDTO = new UserSellerDTO(advice.getSeller());
             return new AdviceDTO(advice.getId(), advice.getName(), gameDTO, userSellerDTO, advice.getPrice());
         });
         return new AdvicePageDTO(adviceDTOPage.getContent(), page, 50, adviceDTOPage.getTotalElements(),

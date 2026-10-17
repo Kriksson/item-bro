@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.security.Principal;
+import java.util.List;
 
 @RestController
 public class GameController {
@@ -27,5 +28,10 @@ public class GameController {
     public ResponseEntity<Void> patch(Principal principal, @PathVariable("id") Long id) {
         gameService.deleteGame(principal, id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/games")
+    public ResponseEntity<List<GameDTO>> getAllGames() {
+        return ResponseEntity.ok(gameService.getOpenedGames());
     }
 }

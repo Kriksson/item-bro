@@ -1,4 +1,10 @@
 package ItemBro.User.DTO;
 
-public record UserSellerDTO(String username) {
+import ItemBro.User.UserRole;
+import ItemBro.User.User;
+
+public record UserSellerDTO(String username, UserRole userRole) {
+    public UserSellerDTO(User user) {
+        this(user.getUsername(), user.getRole());
+    }
 }

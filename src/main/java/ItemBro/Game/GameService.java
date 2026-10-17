@@ -5,12 +5,14 @@ import ItemBro.Game.DTO.GameDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
 import ItemBro.User.UserRole;
-import jakarta.transaction.Transactional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -62,5 +64,17 @@ public class GameService {
         if (gameStatus != GameStatus.OPENED) throw new GameNotOpenedException("game not opened");
 
         game.setStatus(GameStatus.ARCHIVED);
+    }
+
+    @Transactional(readOnly = true)
+    public List<GameDTO> getOpenedGames() {
+        List<Game> games = gameRepository.findAllByStatus(GameStatus.OPENED);
+
+        if (games.isEmpty()) return new ArrayList<>();
+
+        return games.stream()
+                .map(e -> new GameDTO(e.getId(), e.getName()))
+                .toList();
+
     }
 }

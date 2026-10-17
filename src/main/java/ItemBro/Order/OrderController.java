@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.security.Principal;
+import java.util.List;
 
 @RestController
 public class OrderController {
@@ -59,5 +60,15 @@ public class OrderController {
         String responseText =  responseBody.responseText();
         orderService.addSellerResponse(principal, id, responseText);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/orders")
+    public ResponseEntity<List<OrderDTO>> getOrders(Principal principal) {
+        return ResponseEntity.ok(orderService.getOrders(principal));
+    }
+
+    @GetMapping("/api/admin/orders")
+    public ResponseEntity<List<OrderDTO>> getAllOrders() {
+        return ResponseEntity.ok(orderService.getAllOrders());
     }
 }
