@@ -177,7 +177,7 @@ export default function OrdersPage({
                 </span>
                 <span className="order-row-main">
                   <span className="listing-subtitle">
-                    ЗАКАЗ #{order.id} · {order.adviceDTO.game.name}
+                    Заказ #{order.id} · {order.adviceDTO.game.name}
                   </span>
                   <strong>{order.adviceDTO.name}</strong>
                   <span className="order-participants">

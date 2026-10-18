@@ -479,6 +479,92 @@ test("списки игр и заказов не подменяются лока
   await expect(page.locator(".order-row")).toHaveCount(0);
 });
 
+test("объявления показывают среднюю оценку рядом с продавцом без номера объявления", async ({
+  page,
+}, testInfo) => {
+  await server(page);
+  let reviewRequests = 0;
+  await page.route("**/api/users/seller/reviews", (route) => {
+    reviewRequests++;
+    return route.fulfill({
+      json: [
+        { rating: 5, feedback: "Отлично", sellerResponse: null },
+        { rating: 4, feedback: "Хорошо", sellerResponse: null },
+      ],
+    });
+  });
+  await page.goto("/");
+  await selectGame(page);
+  const ratings = page.locator(".listing-card .seller-rating");
+  await expect(ratings).toHaveText(["4,5", "4,5"]);
+  await expect(ratings.first()).toHaveAccessibleName(
+    "Средняя оценка продавца seller: 4,5 из 5",
+  );
+  await expect(page.getByText(/Объявление #\d+/)).toHaveCount(0);
+  expect(reviewRequests).toBe(1);
+  await page.screenshot({
+    path: testInfo.outputPath("seller-rating-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(page.locator(".sidebar")).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: testInfo.outputPath("seller-rating-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Silver Sword", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".seller-rating")).toHaveText("4,5");
+  await dialog.getByRole("button", { name: "seller", exact: true }).click();
+  const profile = page.getByRole("region", {
+    name: "Профиль seller",
+    exact: true,
+  });
+  await expect(profile.locator(".listing-card .seller-rating")).toHaveText([
+    "4,5",
+    "4,5",
+  ]);
+  const requestsAfterProfile = reviewRequests;
+  await profile.getByRole("button", { name: /Отзывы/ }).click();
+  await profile.getByRole("button", { name: /Активные объявления/ }).click();
+  await expect(profile.locator(".listing-card .seller-rating")).toHaveText([
+    "4,5",
+    "4,5",
+  ]);
+  expect(reviewRequests).toBe(requestsAfterProfile);
+});
+
+for (const status of [200, 503]) {
+  test(`отсутствующие или недоступные отзывы не подменяются оценкой (${status})`, async ({
+    page,
+  }) => {
+    await server(page);
+    await page.route("**/api/users/seller/reviews", (route) =>
+      route.fulfill({
+        status,
+        json: status === 200 ? [] : { message: "Unavailable" },
+      }),
+    );
+    await page.goto("/");
+    const response = page.waitForResponse("**/api/users/seller/reviews");
+    await selectGame(page);
+    await response;
+    await expect(page.locator(".listing-card .seller-rating")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Silver Sword", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".listing-card .buy-button")).toHaveCount(2);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+}
+
 test("регистрация отправляет CSRF без Basic, затем выполняется вход", async ({
   page,
 }) => {
@@ -1023,6 +1109,11 @@ test("администратор ищет чужой заказ и открыв�
   page,
 }, testInfo) => {
   await server(page);
+  let historyAvailable = false;
+  await page.route(/\/api\/orders\/74\/messages(?:\?|$)/, (route) => {
+    if (historyAvailable) return route.fallback();
+    return route.fulfill({ status: 403, json: { message: "No permissions" } });
+  });
   await page.goto("/");
   await login(page, "admin");
   await page.getByRole("button", { name: "Управление", exact: true }).click();
@@ -1080,9 +1171,18 @@ test("администратор ищет чужой заказ и открыв�
     .getByRole("button", { name: "Открыть чат", exact: true })
     .click();
   await expect(page.getByRole("heading", { name: "Заказ #74." })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Чат заказа", exact: true }),
-  ).toContainText("Просмотр администратором");
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat.locator(".order-chat-header")).toContainText(
+    "Просмотр администратором · Нет доступа",
+  );
+  await expect(chat.getByRole("alert")).toContainText("No permissions");
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
+  historyAvailable = true;
+  await chat.getByRole("button", { name: "Обновить", exact: true }).click();
+  await expect(chat.locator(".order-chat-header")).toContainText(
+    "Просмотр администратором · Подключён",
+  );
+  await expect(chat.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "В управление", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Управление." }),
@@ -1595,6 +1695,33 @@ test("чат: ранняя история, входящие события, по
   await expect(chat.getByRole("log")).toContainText("Заберу вечером");
 });
 
+test("анимированное окно закрывается по Escape и возвращает фокус; reduced motion сохраняет управление", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/");
+  const trigger = page
+    .getByRole("button", { name: "Войти", exact: true })
+    .first();
+  await expect(trigger).toBeEnabled();
+  for (const reducedMotion of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion });
+    await trigger.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Имя пользователя", { exact: true }).fill("alex");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "Закрыть окно", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
 test("недоступная история чата показывает ошибку и не создаёт локальную переписку", async ({
   page,
 }) => {
@@ -1608,9 +1735,33 @@ test("недоступная история чата показывает оши
   await purchase(page);
   const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
   await expect(chat.getByRole("alert")).toContainText("No permissions");
+  await expect(chat.locator(".order-chat-header")).toContainText("Нет доступа");
+  await expect(chat.locator(".order-chat-header")).not.toContainText(
+    "Подключение…",
+  );
   await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
   await expect(chat.locator(".chat-message")).toHaveCount(0);
   expect(mutations.filter((item) => item.path.endsWith("/messages"))).toEqual(
     [],
   );
+});
+
+test("отсутствующий API чата не оставляет статус подключения", async ({
+  page,
+}) => {
+  let sockets = 0;
+  await server(page, undefined, () => sockets++);
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) =>
+    route.fulfill({ status: 404, json: { message: "Not found" } }),
+  );
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat.locator(".order-chat-header")).toContainText("Недоступен");
+  await expect(chat.getByRole("alert")).toContainText("Чат пока недоступен.");
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
+  await expect(chat.getByRole("status")).toHaveCount(0);
+  expect(sockets).toBe(0);
 });

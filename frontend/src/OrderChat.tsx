@@ -28,7 +28,7 @@ export default function OrderChat({
   const [hasOlder, setHasOlder] = useState(false);
   const [error, setError] = useState("");
   const [sendError, setSendError] = useState("");
-  const [status, setStatus] = useState("Подключение…");
+  const [status, setStatus] = useState("Загрузка истории…");
   const [retry, setRetry] = useState(0);
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -81,12 +81,18 @@ export default function OrderChat({
     setError("");
     setLoading(true);
     setHasOlder(false);
-    setStatus("Подключение…");
+    setStatus("Загрузка истории…");
     const report = (reason: unknown) => {
       if (stopped) return;
+      setStatus("Недоступен");
       setError(
         reason instanceof Error ? reason.message : "Не удалось загрузить чат.",
       );
+      if (reason instanceof ApiError) {
+        if (reason.status === 401) setStatus("Требуется вход");
+        if (reason.status === 403) setStatus("Нет доступа");
+        if (reason.status === 404) setError("Чат пока недоступен.");
+      }
       if (
         reason instanceof ApiError &&
         (reason.status === 401 || reason.status === 403)
@@ -151,6 +157,7 @@ export default function OrderChat({
         syncedId = page.items.at(-1)?.id ?? 0;
         setHasOlder(page.hasMore);
         setLoading(false);
+        setStatus("Подключение…");
         connect();
       })
       .catch((reason) => {

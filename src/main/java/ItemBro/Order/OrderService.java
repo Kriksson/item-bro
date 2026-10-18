@@ -203,7 +203,7 @@ public class OrderService {
 
         List<Order> orders = orderRepository.findAllByBuyerOrSeller(u.get(), u.get());
 
-        if (orders.isEmpty()) throw new OrderNotFoundException("Orders not found");
+        if (orders.isEmpty()) throw new OrderNotFoundException("Заказы не найдены");
 
         return orders.stream()
                 .map(e -> {

@@ -13,15 +13,17 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { Account, Advice, AdvicePage, Game } from "./types";
+import type { Account, Advice, AdvicePage, Game, Marketplace } from "./types";
 import { Empty, HeroArt } from "./components";
 import { money } from "./storage";
 import Username from "./Username";
 import { AdviceArtwork, Avatar, Picture } from "./Media";
+import SellerRating from "./SellerRating";
 
 type Props = {
   kind: "market" | "selling";
   account: Account | null;
+  client: Marketplace;
   games: Game[];
   gamesLoading: boolean;
   gamesError: string;
@@ -44,6 +46,7 @@ export default function MarketPage(props: Props) {
   const {
     kind,
     account,
+    client,
     games,
     gamesLoading,
     gamesError,
@@ -362,9 +365,6 @@ export default function MarketPage(props: Props) {
                 </button>
               </div>
               <div className="listing-info">
-                <span className="listing-subtitle">
-                  Объявление #{advice.id}
-                </span>
                 <h3 title={advice.name}>
                   <button
                     className="listing-open-title"
@@ -378,7 +378,13 @@ export default function MarketPage(props: Props) {
                     user={advice.userSeller}
                     className={`seller-avatar seller-color-${index % 3}`}
                   />
-                  <Username user={advice.userSeller} account={account} />
+                  <span className="seller-identity">
+                    <Username user={advice.userSeller} account={account} />
+                    <SellerRating
+                      client={client}
+                      username={advice.userSeller.username}
+                    />
+                  </span>
                   {advice.userSeller.username === account?.name && (
                     <span className="own-label">это ты</span>
                   )}

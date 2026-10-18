@@ -50,7 +50,7 @@ public class AdviceService {
         this.gameRepository = gameRepository;
     }
 
-    @EntityGraph(attributePaths = {"seller", "game"})
+    @Transactional
     public AdviceDTO createAdvice(AdviceBody adviceBody, Principal principal) {
         Optional<User> u = userRepository.findByUsername(principal.getName());
         if (u.isPresent()) {

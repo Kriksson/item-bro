@@ -36,6 +36,7 @@ import { money, positiveId, requiredText } from "./storage";
 import Username, { ProfileNavigation } from "./Username";
 import ProfilePage from "./ProfilePage";
 import AdminTrades from "./AdminTrades";
+import SellerRating from "./SellerRating";
 
 type Dialog =
   | {
@@ -368,7 +369,10 @@ export default function App() {
             onClick={() => setMobileNav(false)}
           />
         )}
-        <aside className={`sidebar${mobileNav ? " sidebar-open" : ""}`}>
+        <aside
+          id="main-navigation"
+          className={`sidebar${mobileNav ? " sidebar-open" : ""}`}
+        >
           <a
             href="#"
             className="brand"
@@ -443,10 +447,23 @@ export default function App() {
               <button
                 className="icon-button mobile-menu"
                 aria-label="Открыть меню"
+                aria-controls="main-navigation"
+                aria-expanded={mobileNav}
                 onClick={() => setMobileNav(true)}
               >
                 <Menu />
               </button>
+              <a
+                href="#"
+                className="mobile-brand"
+                aria-label="ItemBro — на главную"
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate("market");
+                }}
+              >
+                <Logo />
+              </a>
               <span className="breadcrumb">
                 Площадка <ChevronRight size={13} />{" "}
                 <strong>{pageNames[page]}</strong>
@@ -473,6 +490,7 @@ export default function App() {
               {account ? (
                 <button
                   className="profile"
+                  aria-label={`Аккаунт ${account.name}`}
                   onClick={() => open({ kind: "settings" })}
                 >
                   <Avatar
@@ -501,181 +519,188 @@ export default function App() {
           </header>
 
           <main>
-            {sessionError && (
-              <div className="session-error" role="alert">
-                <p>{sessionError}</p>
-                <button
-                  className="text-button"
-                  disabled={authChecking}
-                  onClick={() => setSessionRetry((value) => value + 1)}
-                >
-                  Повторить проверку <ArrowRight size={15} />
-                </button>
-              </div>
-            )}
-            {(page === "market" || page === "selling") && (
-              <MarketPage
-                key={`${page}-${gameId ?? "games"}-${account?.name ?? "guest"}`}
-                kind={page}
-                account={account}
-                games={games}
-                gamesLoading={gamesLoading}
-                gamesError={gamesError}
-                gameId={gameId}
-                data={data}
-                loading={loading}
-                error={loadError}
-                pageNumber={pageNumber}
-                onChooseGame={chooseGame}
-                onBack={() => {
-                  setGameId(null);
-                  setPageNumber(0);
-                }}
-                onRetry={() => setRefresh((value) => value + 1)}
-                onPage={setPageNumber}
-                onCreate={() =>
-                  open(account ? { kind: "listing" } : { kind: "login" })
-                }
-                onBuy={(advice) =>
-                  open(account ? { kind: "buy", advice } : { kind: "login" })
-                }
-                onArchive={(advice) => open({ kind: "archive-advice", advice })}
-                onOpen={(advice) => open({ kind: "advice", advice })}
-              />
-            )}
-
-            {page === "orders" && (
-              <>
-                {formError && (
-                  <p className="form-error" role="alert">
-                    {formError}
-                  </p>
-                )}
-                <OrdersPage
-                  account={account}
-                  orders={orders}
-                  loading={ordersLoading}
-                  error={ordersError}
-                  busy={busy}
-                  onOpen={(order) => void openOrder(order)}
-                  onRetry={() => setRefresh((value) => value + 1)}
-                  onLogin={() => open({ kind: "login" })}
-                  onMarket={() => navigate("market")}
-                />
-              </>
-            )}
-
-            {page === "order" && activeOrder && account && (
-              <OrderWorkspace
-                order={activeOrder}
-                account={account}
-                client={client}
-                busy={busy}
-                error={formError}
-                onBack={() => navigate(orderReturnPage)}
-                backLabel={
-                  orderReturnPage === "admin" ? "В управление" : "К заказам"
-                }
-                focusChat={focusChat}
-                onAction={(action) => orderAction(activeOrder, action)}
-                onFeedback={(rating, text) =>
-                  work(async () => {
-                    await client.feedback(
-                      activeOrder.id,
-                      rating,
-                      requiredText(text),
-                    );
-                    const updated = await client.order(activeOrder.id);
-                    rememberOrder(updated);
-                    setActiveOrder(updated);
-                    notify("Отзыв сохранён.");
-                  })
-                }
-                onResponse={(text) =>
-                  work(async () => {
-                    await client.response(activeOrder.id, requiredText(text));
-                    const updated = await client.order(activeOrder.id);
-                    rememberOrder(updated);
-                    setActiveOrder(updated);
-                    notify("Ответ сохранён.");
-                  })
-                }
-              />
-            )}
-
-            {page === "profile" && profileName && (
-              <ProfilePage
-                key={`${profileName}-${account?.name ?? "guest"}-${refresh}`}
-                username={profileName}
-                client={client}
-                account={account}
-                onBack={() => navigate("market")}
-                onOpenAdvice={(advice) => open({ kind: "advice", advice })}
-              />
-            )}
-
-            {page === "admin" && isAdmin && (
-              <section className="content-page">
-                <h1>
-                  Управление<span className="heading-dot">.</span>
-                </h1>
-                <div className="admin-grid">
-                  <div className="panel">
-                    <Gamepad2 size={28} />
-                    <h3>Каталог игр</h3>
-                    <button
-                      className="button"
-                      disabled={!account}
-                      onClick={() => open({ kind: "new-game" })}
-                    >
-                      <Plus size={16} />
-                      Создать игру
-                    </button>
-                  </div>
+            <div className="page-content" key={page}>
+              {sessionError && (
+                <div className="session-error" role="alert">
+                  <p>{sessionError}</p>
+                  <button
+                    className="text-button"
+                    disabled={authChecking}
+                    onClick={() => setSessionRetry((value) => value + 1)}
+                  >
+                    Повторить проверку <ArrowRight size={15} />
+                  </button>
                 </div>
-                {formError && !dialog && (
-                  <p role="alert" className="form-error">
-                    {formError}
-                  </p>
-                )}
-                <h2 className="admin-section-title">Игры на площадке</h2>
-                <div className="managed-games">
-                  {games.map((game) => (
-                    <div className="managed-game" key={game.id}>
-                      <Gamepad2 size={20} />
-                      <span>
-                        <strong>{game.name}</strong>
-                        <small>ID {game.id}</small>
-                      </span>
+              )}
+              {(page === "market" || page === "selling") && (
+                <MarketPage
+                  key={`${page}-${gameId ?? "games"}-${account?.name ?? "guest"}`}
+                  kind={page}
+                  account={account}
+                  client={client}
+                  games={games}
+                  gamesLoading={gamesLoading}
+                  gamesError={gamesError}
+                  gameId={gameId}
+                  data={data}
+                  loading={loading}
+                  error={loadError}
+                  pageNumber={pageNumber}
+                  onChooseGame={chooseGame}
+                  onBack={() => {
+                    setGameId(null);
+                    setPageNumber(0);
+                  }}
+                  onRetry={() => setRefresh((value) => value + 1)}
+                  onPage={setPageNumber}
+                  onCreate={() =>
+                    open(account ? { kind: "listing" } : { kind: "login" })
+                  }
+                  onBuy={(advice) =>
+                    open(account ? { kind: "buy", advice } : { kind: "login" })
+                  }
+                  onArchive={(advice) =>
+                    open({ kind: "archive-advice", advice })
+                  }
+                  onOpen={(advice) => open({ kind: "advice", advice })}
+                />
+              )}
+
+              {page === "orders" && (
+                <>
+                  {formError && (
+                    <p className="form-error" role="alert">
+                      {formError}
+                    </p>
+                  )}
+                  <OrdersPage
+                    account={account}
+                    orders={orders}
+                    loading={ordersLoading}
+                    error={ordersError}
+                    busy={busy}
+                    onOpen={(order) => void openOrder(order)}
+                    onRetry={() => setRefresh((value) => value + 1)}
+                    onLogin={() => open({ kind: "login" })}
+                    onMarket={() => navigate("market")}
+                  />
+                </>
+              )}
+
+              {page === "order" && activeOrder && account && (
+                <OrderWorkspace
+                  order={activeOrder}
+                  account={account}
+                  client={client}
+                  busy={busy}
+                  error={formError}
+                  onBack={() => navigate(orderReturnPage)}
+                  backLabel={
+                    orderReturnPage === "admin" ? "В управление" : "К заказам"
+                  }
+                  focusChat={focusChat}
+                  onAction={(action) => orderAction(activeOrder, action)}
+                  onFeedback={(rating, text) =>
+                    work(async () => {
+                      await client.feedback(
+                        activeOrder.id,
+                        rating,
+                        requiredText(text),
+                      );
+                      const updated = await client.order(activeOrder.id);
+                      rememberOrder(updated);
+                      setActiveOrder(updated);
+                      notify("Отзыв сохранён.");
+                    })
+                  }
+                  onResponse={(text) =>
+                    work(async () => {
+                      await client.response(activeOrder.id, requiredText(text));
+                      const updated = await client.order(activeOrder.id);
+                      rememberOrder(updated);
+                      setActiveOrder(updated);
+                      notify("Ответ сохранён.");
+                    })
+                  }
+                />
+              )}
+
+              {page === "profile" && profileName && (
+                <ProfilePage
+                  key={`${profileName}-${account?.name ?? "guest"}-${refresh}`}
+                  username={profileName}
+                  client={client}
+                  account={account}
+                  onBack={() => navigate("market")}
+                  onOpenAdvice={(advice) => open({ kind: "advice", advice })}
+                />
+              )}
+
+              {page === "admin" && isAdmin && (
+                <section className="content-page">
+                  <h1>
+                    Управление<span className="heading-dot">.</span>
+                  </h1>
+                  <div className="admin-grid">
+                    <div className="panel">
+                      <Gamepad2 size={28} />
+                      <h3>Каталог игр</h3>
                       <button
-                        className="icon-button"
-                        aria-label={`Изображение игры ${game.name}`}
-                        onClick={() => open({ kind: "game-image", game })}
-                      >
-                        <ImagePlus size={17} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        aria-label={`Архивировать игру ${game.name}`}
+                        className="button"
                         disabled={!account}
-                        onClick={() => open({ kind: "archive-game", game })}
+                        onClick={() => open({ kind: "new-game" })}
                       >
-                        <Trash2 size={17} />
+                        <Plus size={16} />
+                        Создать игру
                       </button>
                     </div>
-                  ))}
-                </div>
-                {account && (
-                  <AdminTrades
-                    client={client}
-                    account={account}
-                    busy={busy}
-                    refresh={refresh}
-                    onOpen={(order, chat) => void openOrder(order, true, chat)}
-                  />
-                )}
-              </section>
-            )}
+                  </div>
+                  {formError && !dialog && (
+                    <p role="alert" className="form-error">
+                      {formError}
+                    </p>
+                  )}
+                  <h2 className="admin-section-title">Игры на площадке</h2>
+                  <div className="managed-games">
+                    {games.map((game) => (
+                      <div className="managed-game" key={game.id}>
+                        <Gamepad2 size={20} />
+                        <span>
+                          <strong>{game.name}</strong>
+                          <small>ID {game.id}</small>
+                        </span>
+                        <button
+                          className="icon-button"
+                          aria-label={`Изображение игры ${game.name}`}
+                          onClick={() => open({ kind: "game-image", game })}
+                        >
+                          <ImagePlus size={17} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          aria-label={`Архивировать игру ${game.name}`}
+                          disabled={!account}
+                          onClick={() => open({ kind: "archive-game", game })}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {account && (
+                    <AdminTrades
+                      client={client}
+                      account={account}
+                      busy={busy}
+                      refresh={refresh}
+                      onOpen={(order, chat) =>
+                        void openOrder(order, true, chat)
+                      }
+                    />
+                  )}
+                </section>
+              )}
+            </div>
           </main>
         </div>
 
@@ -697,6 +722,8 @@ export default function App() {
 
         {dialog && (
           <Modal
+            variant={dialog.kind}
+            canClose={!busy}
             title={
               dialog.kind === "login"
                 ? "Вход"
@@ -978,10 +1005,14 @@ export default function App() {
                   </div>
                   <div className="summary-line">
                     <span>Продавец</span>
-                    <strong>
+                    <strong className="seller-identity">
                       <Username
                         user={dialog.advice.userSeller}
                         account={account}
+                      />
+                      <SellerRating
+                        client={client}
+                        username={dialog.advice.userSeller.username}
                       />
                     </strong>
                   </div>

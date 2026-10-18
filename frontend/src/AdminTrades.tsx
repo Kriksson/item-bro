@@ -141,7 +141,7 @@ export default function AdminTrades({
             <article className="admin-order-card" key={order.id}>
               <div className="admin-order-main">
                 <span className="listing-subtitle">
-                  ЗАКАЗ #{order.id} · {order.adviceDTO.game.name}
+                  Заказ #{order.id} · {order.adviceDTO.game.name}
                 </span>
                 <h3>{order.adviceDTO.name}</h3>
                 <div className="admin-order-parties">

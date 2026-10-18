@@ -48,11 +48,11 @@ export default function OrderWorkspace({
       </button>
       <div className="order-workspace-heading">
         <div>
-          <span className="eyebrow">{order.adviceDTO.game.name}</span>
           <h1>
             Заказ #{order.id}
             <span className="heading-dot">.</span>
           </h1>
+          <span className="order-game-name">{order.adviceDTO.game.name}</span>
         </div>
         <div className="order-heading-badges">
           <OrderKindBadge kind={kind} />
@@ -70,14 +70,14 @@ export default function OrderWorkspace({
             </div>
             <div className="order-parties">
               <div>
-                <small>ПОКУПАТЕЛЬ</small>
+                <small>Покупатель</small>
                 <strong>
                   <Username user={order.userBuyerDTO} account={account} />
                 </strong>
               </div>
               <ArrowRight size={18} />
               <div>
-                <small>ПРОДАВЕЦ</small>
+                <small>Продавец</small>
                 <strong>
                   <Username
                     user={order.adviceDTO.userSeller}
@@ -150,7 +150,7 @@ export default function OrderWorkspace({
                 <p>{order.feedbackText}</p>
                 {order.sellerResponseText && (
                   <blockquote>
-                    <small>ОТВЕТ ПРОДАВЦА</small>
+                    <small>Ответ продавца</small>
                     <strong>
                       <Username
                         user={order.adviceDTO.userSeller}

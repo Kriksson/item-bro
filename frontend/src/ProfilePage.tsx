@@ -19,6 +19,7 @@ import Username from "./Username";
 import { AdviceArtwork, Avatar } from "./Media";
 import { validProfileFields } from "./api";
 import { money } from "./storage";
+import SellerRating from "./SellerRating";
 
 export default function ProfilePage({
   username,
@@ -213,7 +214,14 @@ export default function ProfilePage({
                     </button>
                   </h3>
                   <div className="seller">
-                    <Username user={advice.userSeller} account={account} />
+                    <span className="seller-identity">
+                      <Username user={advice.userSeller} account={account} />
+                      <SellerRating
+                        client={client}
+                        username={advice.userSeller.username}
+                        reviews={reviews}
+                      />
+                    </span>
                   </div>
                   <div className="listing-bottom">
                     <strong className="listing-price">
@@ -267,7 +275,7 @@ export default function ProfilePage({
               {review.sellerResponseText && (
                 <blockquote>
                   <small>
-                    ОТВЕТ ПРОДАВЦА ·{" "}
+                    Ответ продавца ·{" "}
                     <Username user={profile} interactive={false} />
                   </small>
                   <p>{review.sellerResponseText}</p>
