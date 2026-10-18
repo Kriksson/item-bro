@@ -1987,6 +1987,66 @@ for (const [status, label] of [
   });
 }
 
+test("чат: закрытие WS с кодом 1008 при истечении сессии останавливает переподключения", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+  const sockets: WebSocketRoute[] = [];
+  await server(page, undefined, (ws) => sockets.push(ws));
+  let expired = false;
+  let reads = 0;
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+    reads++;
+    if (expired)
+      return route.fulfill({
+        status: 401,
+        json: { message: "Требуется вход" },
+      });
+    return route.fallback();
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat.locator(".order-chat-header")).toContainText("Подключён");
+  expired = true;
+  sockets.at(-1)!.close({ code: 1008, reason: "Session expired" });
+  await expect(chat.locator(".order-chat-header")).toContainText(
+    "Требуется вход",
+  );
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
+  const stopped = { connections: sockets.length, reads };
+  await page.clock.fastForward(30_000);
+  expect({ connections: sockets.length, reads }).toEqual(stopped);
+});
+
+test("выход из аккаунта закрывает открытый чат и отменяет его фоновые запросы", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+  let connections = 0;
+  let reads = 0;
+  await server(page, undefined, () => connections++);
+  page.on("request", (request) => {
+    if (/\/api\/orders\/73\/messages(?:\?|$)/.test(request.url())) reads++;
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  await expect(page.locator(".order-chat-header")).toContainText("Подключён");
+  await logout(page);
+  await expect(
+    page.getByRole("region", { name: "Чат заказа", exact: true }),
+  ).toHaveCount(0);
+  const stopped = { connections, reads };
+  await page.clock.fastForward(30_000);
+  expect({ connections, reads }).toEqual(stopped);
+});
+
 for (const status of ["CLOSED", "REFUND"] as const) {
   test(`чат после ${status}: покупатель и продавец могут продолжить переписку`, async ({
     page,

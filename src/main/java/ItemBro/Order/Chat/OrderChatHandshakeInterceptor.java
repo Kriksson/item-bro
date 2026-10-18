@@ -4,9 +4,11 @@ import ItemBro.Exception.NoPermissionsException;
 import ItemBro.Exception.OrderNotFoundException;
 import ItemBro.Exception.UserNotFoundException;
 import ItemBro.Order.OrderService;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
@@ -22,8 +24,10 @@ public class OrderChatHandshakeInterceptor implements HandshakeInterceptor {
 
     private static final Pattern CHAT_PATH = Pattern.compile("^/api/orders/([^/]+)/chat/ws$");
     private final OrderService orderService;
-    public OrderChatHandshakeInterceptor(OrderService orderService) {
+    private final OrderChatWebSocketHandler webSocketHandler;
+    public OrderChatHandshakeInterceptor(OrderService orderService, OrderChatWebSocketHandler webSocketHandler) {
         this.orderService = orderService;
+        this.webSocketHandler = webSocketHandler;
     }
 
     @Override
@@ -66,7 +70,30 @@ public class OrderChatHandshakeInterceptor implements HandshakeInterceptor {
             return reject(response, HttpStatus.UNAUTHORIZED);
         }
 
+        if (!(request instanceof ServletServerHttpRequest servletRequest)) {
+            return reject(response, HttpStatus.BAD_REQUEST);
+        }
+
+        HttpSession httpSession = servletRequest.getServletRequest().getSession(false);
+        if (httpSession == null) {
+            return reject(response, HttpStatus.UNAUTHORIZED);
+        }
+
+        OrderChatSessionState orderChatSessionState;
+
+        try {
+            orderChatSessionState = getChatSession(httpSession);
+        } catch (IllegalStateException e) {
+            return reject(response, HttpStatus.UNAUTHORIZED);
+        }
+
+        if (!(orderChatSessionState.isActive())) {
+            return  reject(response, HttpStatus.UNAUTHORIZED);
+        }
+
         attributes.put("orderId", orderId);
+        attributes.put(OrderChatSessionState.ATTRIBUTE, orderChatSessionState);
+
         return true;
     }
 
@@ -82,5 +109,20 @@ public class OrderChatHandshakeInterceptor implements HandshakeInterceptor {
     private boolean reject(ServerHttpResponse response, HttpStatus status) {
         response.setStatusCode(status);
         return false;
+    }
+
+    private OrderChatSessionState getChatSession(HttpSession session) {
+        synchronized (session) {
+            Object attribute = session.getAttribute(OrderChatSessionState.ATTRIBUTE);
+            if (attribute instanceof OrderChatSessionState exState) {
+                return exState;
+            }
+
+            OrderChatSessionState state = new OrderChatSessionState(webSocketHandler);
+
+            session.setAttribute(OrderChatSessionState.ATTRIBUTE, state);
+
+            return state;
+        }
     }
 }

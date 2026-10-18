@@ -28,6 +28,13 @@ public class OrderChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        Object stateAttribute = session.getAttributes().get(OrderChatSessionState.ATTRIBUTE);
+
+        if (!(stateAttribute instanceof OrderChatSessionState chatSession) || !chatSession.isActive()) {
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+
         Object attribute = session.getAttributes().get("orderId");
 
         if (!(attribute instanceof Long orderId)) {
@@ -35,7 +42,7 @@ public class OrderChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        WebSocketSession safeSessions = new ConcurrentWebSocketSessionDecorator(
+        WebSocketSession safeSession = new ConcurrentWebSocketSessionDecorator(
                 session, 10_000, 64*1024
         );
 
@@ -44,10 +51,14 @@ public class OrderChatWebSocketHandler extends TextWebSocketHandler {
                 connections = new ConcurrentHashMap<>();
             }
 
-            connections.put(session.getId(), safeSessions);
+            connections.put(session.getId(), safeSession);
 
             return connections;
         });
+
+        if (!chatSession.isActive()) {
+            closeSession(safeSession, CloseStatus.POLICY_VIOLATION);
+        }
     }
 
     @Override
@@ -111,6 +122,13 @@ public class OrderChatWebSocketHandler extends TextWebSocketHandler {
 
         for (WebSocketSession session : connections.values()) {
             try {
+                Object stateAttribute = session.getAttributes().get(OrderChatSessionState.ATTRIBUTE);
+                if (!(stateAttribute instanceof OrderChatSessionState orderChatSessionState)
+                        || !orderChatSessionState.isActive()) {
+                    closeSession(session, CloseStatus.POLICY_VIOLATION);
+                    continue;
+                }
+
                 if (!session.isOpen()) {
                     removeSession(session);
                     continue;
@@ -125,13 +143,29 @@ public class OrderChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void closeSession(WebSocketSession session) {
+        closeSession(session, CloseStatus.SERVER_ERROR);
+    }
+
+    private void closeSession(WebSocketSession session, CloseStatus status) {
         removeSession(session);
+
         try {
             if (session.isOpen()) {
-                session.close(CloseStatus.SERVER_ERROR);
+                session.close(status);
             }
         } catch (IOException | RuntimeException e) {
             logger.debug("Не удалось закрыть сессию {}", session.getId(), e);
+        }
+    }
+
+    public void closeHttpSession(OrderChatSessionState state) {
+        for (Map<String, WebSocketSession> connections : sessions.values()) {
+            for (WebSocketSession session : connections.values()) {
+                Object attribute = session.getAttributes().get(OrderChatSessionState.ATTRIBUTE);
+                if (attribute == state) {
+                    closeSession(session, CloseStatus.POLICY_VIOLATION);
+                }
+            }
         }
     }
 

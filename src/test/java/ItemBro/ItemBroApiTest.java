@@ -47,6 +47,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +92,7 @@ class ItemBroApiTest {
     }
 
     @Autowired MockMvc mvc;
+    @Autowired DataSource dataSource;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired UserRepository users;
@@ -875,7 +877,7 @@ class ItemBroApiTest {
 
         mvc.perform(orderFeedback(999L, new OrderFeedbackBody(5, "Отзыв")).with(user("alex")))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Order not found"));
+                .andExpect(jsonPath("$.message").value("Заказ не найден"));
 
         assertThat(orders.count()).isZero();
     }
@@ -929,7 +931,7 @@ class ItemBroApiTest {
 
         mvc.perform(sellerResponse(orderId, "Ответ до отзыва").with(user("maria")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Feedback not created"));
+                .andExpect(jsonPath("$.message").value("Отзыв не был создан"));
 
         Order order = orders.findById(orderId).orElseThrow();
         assertThat(order.getSellerResponse()).isNull();
@@ -945,7 +947,7 @@ class ItemBroApiTest {
 
         mvc.perform(sellerResponse(999L, "Ответ").with(user("maria")))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Order not found"));
+                .andExpect(jsonPath("$.message").value("Заказ не найден"));
 
         assertThat(orders.count()).isZero();
     }
@@ -1245,7 +1247,7 @@ class ItemBroApiTest {
         mvc.perform(patch("/api/orders/{id}/{action}", id, firstAction).with(user(firstActor)).with(csrf()))
                 .andExpect(status().isNoContent());
         mvc.perform(patch("/api/orders/{id}/{action}", id, secondAction).with(user(secondActor)).with(csrf()))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("order not open"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("Заказ не открыт"));
 
         if (firstAction.equals("confirm")) {
             assertOrderStateAndBalances(id, OrderStatus.CLOSED, "75", "25");
@@ -1260,7 +1262,7 @@ class ItemBroApiTest {
     void rejectsFinalizingUnknownOrder(String action) throws Exception {
         savedUser("alex", new BigDecimal("100"));
         mvc.perform(patch("/api/orders/999/{action}", action).with(user("alex")).with(csrf()))
-                .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("Order not found"));
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("Заказ не найден"));
         assertThat(users.findByUsername("alex").orElseThrow().getBalance()).isEqualByComparingTo("100");
     }
 
@@ -1291,6 +1293,133 @@ class ItemBroApiTest {
                 .andExpect(status().isNoContent());
         assertThat(session.isInvalid()).isTrue();
         mvc.perform(get("/api/user/me")).andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"confirm", "refund"})
+    @DisplayName("Администрирование: повторное открытие удерживает деньги даже при нулевом балансе продавца")
+    void adminCanReopenAndResolveOrderWithSellerDebt(String resolution) throws Exception {
+        savedAdmin();
+        Advice advice = orderFixture(new BigDecimal("100"), PRICE);
+        Long id = orderService.createOrder(() -> "alex", advice.getId()).id();
+        mvc.perform(orderConfirmation(id).with(user("alex"))).andExpect(status().isNoContent());
+        // Продавец уже потратил выручку: повторное удержание может увести баланс в минус.
+        jdbc.update("UPDATE users SET balance=0, version=version+1 WHERE username='maria'");
+        mvc.perform(adminOrderAction(id, "reopen")).andExpect(status().isNoContent());
+        assertOrderStateAndBalances(id, OrderStatus.OPENED, "75", "-25");
+        mvc.perform(adminOrderAction(id, "reopen")).andExpect(status().isConflict());
+        assertOrderStateAndBalances(id, OrderStatus.OPENED, "75", "-25");
+        mvc.perform(adminOrderAction(id, resolution)).andExpect(status().isNoContent());
+        if (resolution.equals("confirm")) {
+            assertOrderStateAndBalances(id, OrderStatus.CLOSED, "75", "0");
+        } else {
+            assertOrderStateAndBalances(id, OrderStatus.REFUND, "100", "-25");
+        }
+        mvc.perform(adminOrderAction(id, resolution)).andExpect(status().isConflict());
+        if (resolution.equals("confirm")) {
+            assertOrderStateAndBalances(id, OrderStatus.CLOSED, "75", "0");
+        } else {
+            assertOrderStateAndBalances(id, OrderStatus.REFUND, "100", "-25");
+        }
+        assertThat(users.findByUsername("admin").orElseThrow().getBalance()).isEqualByComparingTo("0");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"reopen,OPENED", "reopen,REFUND", "reopen,ARCHIVED",
+            "confirm,CLOSED", "confirm,REFUND", "confirm,ARCHIVED",
+            "refund,CLOSED", "refund,REFUND", "refund,ARCHIVED"})
+    @DisplayName("Администрирование: недопустимый переход возвращает 409 без движения денег")
+    void adminActionsRejectWrongOrderStatus(String action, OrderStatus initial) throws Exception {
+        savedAdmin();
+        Advice advice = orderFixture(new BigDecimal("100"), PRICE);
+        Long id = orderService.createOrder(() -> "alex", advice.getId()).id();
+        Order order = orders.findById(id).orElseThrow();
+        order.setStatus(initial);
+        orders.save(order);
+        mvc.perform(adminOrderAction(id, action)).andExpect(status().isConflict());
+        assertOrderStateAndBalances(id, initial, "75", "0");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"reopen", "confirm", "refund"})
+    @DisplayName("Администрирование: действия требуют авторизацию, роль ADMIN и CSRF")
+    void adminOrderActionsRequireAuthenticationRoleAndCsrf(String action) throws Exception {
+        savedAdmin();
+        Advice advice = orderFixture(new BigDecimal("100"), PRICE);
+        Long id = orderService.createOrder(() -> "alex", advice.getId()).id();
+        mvc.perform(patch("/api/admin/orders/{id}/{action}", id, action).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/admin/orders/{id}/{action}", id, action).with(user("alex")).with(csrf()))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/admin/orders/{id}/{action}", id, action).with(user("admin").roles("ADMIN")))
+                .andExpect(status().isForbidden());
+        assertOrderStateAndBalances(id, OrderStatus.OPENED, "75", "0");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"reopen", "confirm", "refund"})
+    @DisplayName("Администрирование: старая сессия с отозванной в БД ролью не разрешает действие")
+    void revokedAdminSessionCannotChangeOrder(String action) throws Exception {
+        savedAdmin();
+        Advice advice = orderFixture(new BigDecimal("100"), PRICE);
+        Long id = orderService.createOrder(() -> "alex", advice.getId()).id();
+        var login = mvc.perform(get("/api/user/me").with(httpBasic("admin", PASSWORD)))
+                .andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
+        jdbc.update("UPDATE users SET role='USER', version=version+1 WHERE username='admin'");
+        mvc.perform(patch("/api/admin/orders/{id}/{action}", id, action).session(session).with(csrf()))
+                .andExpect(status().isForbidden());
+        assertOrderStateAndBalances(id, OrderStatus.OPENED, "75", "0");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"reopen", "confirm", "refund"})
+    @DisplayName("Администрирование: невалидный ID — 400, отсутствующий заказ — 404")
+    void adminActionsValidateOrderId(String action) throws Exception {
+        savedAdmin();
+        for (String id : List.of("0", "-1", "abc")) {
+            mvc.perform(adminOrderAction(id, action)).andExpect(status().isBadRequest());
+        }
+        mvc.perform(adminOrderAction(Long.MAX_VALUE, action)).andExpect(status().isNotFound());
+        assertThat(orders.count()).isZero();
+        assertThat(users.findByUsername("admin").orElseThrow().getBalance()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("Администрирование: одновременные подтверждение и возврат дают 204/409 и одно движение денег")
+    void concurrentAdminConfirmAndRefundCannotReleaseMoneyTwice() throws Exception {
+        savedAdmin();
+        Advice advice = orderFixture(new BigDecimal("100"), PRICE);
+        Long id = orderService.createOrder(() -> "alex", advice.getId()).id();
+        var executor = Executors.newFixedThreadPool(2);
+        try (var gate = dataSource.getConnection()) {
+            gate.setAutoCommit(false);
+            try (var statement = gate.prepareStatement("SELECT id FROM orders WHERE id=? FOR UPDATE")) {
+                statement.setLong(1, id);
+                statement.executeQuery().close();
+            }
+            var confirm = executor.submit(() -> mvc.perform(adminOrderAction(id, "confirm")).andReturn().getResponse().getStatus());
+            var refund = executor.submit(() -> mvc.perform(adminOrderAction(id, "refund")).andReturn().getResponse().getStatus());
+            try {
+                org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(10)).untilAsserted(() ->
+                        assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'", Long.class))
+                                .isEqualTo(2));
+            } finally { gate.commit(); }
+            assertThat(List.of(confirm.get(15, TimeUnit.SECONDS), refund.get(15, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(204, 409);
+            if (orders.findById(id).orElseThrow().getStatus() == OrderStatus.CLOSED) {
+                assertOrderStateAndBalances(id, OrderStatus.CLOSED, "75", "25");
+            } else {
+                assertOrderStateAndBalances(id, OrderStatus.REFUND, "100", "0");
+            }
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private MockHttpServletRequestBuilder adminOrderAction(Object id, String action) {
+        return patch("/api/admin/orders/{id}/{action}", id, action).with(user("admin").roles("ADMIN")).with(csrf());
     }
 
     private void concurrentPurchase(Long adviceId, CountDownLatch bothLoaded) {

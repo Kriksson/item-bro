@@ -200,14 +200,15 @@ class OrderMessagesApiTest {
 
     @ParameterizedTest
     @EnumSource(value = OrderStatus.class, names = "OPENED", mode = EnumSource.Mode.EXCLUDE)
-    @DisplayName("Отправка: новый текст в неоткрытый заказ запрещён даже администратору")
-    void cannotSendNewMessagesToNonOpenedOrder(OrderStatus orderStatus) throws Exception {
+    @DisplayName("Отправка: покупатель, продавец и администратор могут писать после завершения заказа")
+    void canSendNewMessagesAfterOrderStopsBeingOpened(OrderStatus orderStatus) throws Exception {
         changeStatus(orderStatus);
-        for (User sender : List.of(buyer, admin)) {
+        for (User sender : List.of(buyer, seller, admin)) {
             mvc.perform(send(order, sender, "Привет", REQUEST_ID))
-                    .andExpect(status().isConflict());
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.sender.username").value(sender.getUsername()));
         }
-        assertThat(messageCount()).isZero();
+        assertThat(messageCount()).isEqualTo(3);
     }
 
     @Test
