@@ -74,6 +74,7 @@ public class SecuritySettings {
 
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/user/me/avatar").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}/image").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/games/{id}/image").hasRole("ADMIN")
 
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/cancel").authenticated()

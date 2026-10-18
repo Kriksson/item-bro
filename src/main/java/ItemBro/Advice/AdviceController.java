@@ -45,4 +45,9 @@ public class AdviceController {
                                                  @RequestPart("file") MultipartFile file) throws IOException {
         return ResponseEntity.ok(adviceService.uploadImage(id, file, principal));
     }
+
+    @DeleteMapping("/api/advices/{id}/image")
+    public ResponseEntity<AdviceDTO> removeImage(Principal principal, @PathVariable Long id) throws IOException {
+        return ResponseEntity.ok(adviceService.removeImage(id, principal));
+    }
 }

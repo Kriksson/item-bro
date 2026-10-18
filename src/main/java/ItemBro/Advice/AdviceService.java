@@ -203,4 +203,54 @@ public class AdviceService {
             logger.warn("Не удалось удалить файл: {}", path, e);
         }
     }
+
+    @Transactional(rollbackFor = IOException.class)
+    public AdviceDTO removeImage(Long id, Principal principal) throws IOException {
+
+        Optional<User> u =  userRepository.findByUsername(principal.getName());
+        if (u.isEmpty()) throw new UserNotFoundException("User not found");
+        User userFromRequest =  u.get();
+
+        Optional<Advice> a = adviceRepository.findById(id);
+        if (a.isEmpty()) throw new AdviceNotFoundException("Advice not found");
+        Advice advice = a.get();
+        AdviceStatus adviceStatus = advice.getStatus();
+        if (adviceStatus == AdviceStatus.ARCHIVED) throw new AdviceNotFoundException("Advice in archive");
+
+        Game game = advice.getGame();
+        GameStatus gameStatus = game.getStatus();
+        if (gameStatus != GameStatus.OPENED) throw new GameArchivedException("game not opened");
+
+        User userSeller =  advice.getSeller();
+
+        if (userFromRequest.getRole() != UserRole.ADMIN) {
+            if (!userFromRequest.getId().equals(userSeller.getId())) {
+                throw new NoPermissionsException("No permissions");
+            }
+        }
+
+        String imageUrl = advice.getImageUrl();
+        if (imageUrl == null) return new AdviceDTO(advice, game, advice.getSeller());
+
+        Path uploadDirectory = Path.of("/app/uploads");
+        Files.createDirectories(uploadDirectory);
+
+        String fileId = imageUrl.substring("/api/media/".length());
+        UUID fileUUID = UUID.fromString(fileId);
+        Path file = uploadDirectory.resolve(fileId);
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    deleteFile(file);
+                } else {
+                    logger.warn("Файл не был удалён: {}", file);
+                }
+            }
+        });
+
+        advice.setImageUrl(null);
+        return new AdviceDTO(advice, game, advice.getSeller());
+    }
 }
