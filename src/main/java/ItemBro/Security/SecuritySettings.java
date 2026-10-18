@@ -83,6 +83,7 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.PATCH, "/api/user/me").authenticated()
 
                         .requestMatchers(HttpMethod.PUT, "/api/user/me/avatar").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/games/{id}/image").hasRole("ADMIN")
 
                         .requestMatchers(HttpMethod.GET, "/api/admin/orders").hasRole("ADMIN")
                         .anyRequest().denyAll())

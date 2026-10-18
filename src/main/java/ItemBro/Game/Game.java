@@ -19,6 +19,10 @@ public class Game {
     @Column(name = "image_url")
     private String imageUrl = null;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
     protected Game() {}
     public Game(String name) {
         this.name = name;

@@ -7,6 +7,8 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.io.FileNotFoundException;
 
@@ -101,6 +103,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
         ApiError apiError = new ApiError("Некорректное тело запроса");
+        return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+    }
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public  ResponseEntity<ApiError> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
+        ApiError apiError = new ApiError("Размер изображения - до 5МБ");
+        return new ResponseEntity<>(apiError, HttpStatus.PAYLOAD_TOO_LARGE);
+    }
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiError> handleMissingServletRequestPartException(MissingServletRequestPartException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
     }
 }

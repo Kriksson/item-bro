@@ -1,0 +1,2 @@
+ALTER TABLE games
+    ADD COLUMN version BIGINT DEFAULT 0;
