@@ -34,6 +34,10 @@ public class Advice {
     @Column(name = "image_url")
     private String imageUrl = null;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
     protected Advice() {}
     public Advice(String name, Game game, User seller, BigDecimal price, AdviceStatus status) {
         this.name = name;

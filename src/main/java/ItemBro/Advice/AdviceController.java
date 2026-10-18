@@ -6,7 +6,9 @@ import ItemBro.Advice.DTO.AdvicePageDTO;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.net.URI;
 import java.security.Principal;
 
@@ -31,7 +33,16 @@ public class AdviceController {
     }
 
     @GetMapping("/api/advices")
-    public ResponseEntity<AdvicePageDTO> getAdvicesByGameId(@RequestParam(value = "gameId", required = true) Long gameId, @RequestParam(value = "page", required = false) Integer page) {
+    public ResponseEntity<AdvicePageDTO> getAdvicesByGameId(
+            @RequestParam(value = "gameId", required = true) Long gameId,
+            @RequestParam(value = "page", required = false) Integer page) {
         return ResponseEntity.ok(adviceService.getAdvicesByGame(gameId, page));
+    }
+
+    @PutMapping("/api/advices/{id}/image")
+    public ResponseEntity<AdviceDTO> uploadImage(Principal principal,
+                                                 @PathVariable Long id,
+                                                 @RequestPart("file") MultipartFile file) throws IOException {
+        return ResponseEntity.ok(adviceService.uploadImage(id, file, principal));
     }
 }

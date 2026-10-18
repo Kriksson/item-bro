@@ -1,0 +1,2 @@
+ALTER TABLE advices
+    ADD COLUMN version BIGINT DEFAULT 0;
