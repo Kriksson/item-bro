@@ -49,6 +49,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -102,7 +103,7 @@ class ItemBroApiTest {
 
     @BeforeEach
     void clearTestDatabase() {
-        jdbc.execute("TRUNCATE TABLE orders, advices, games, users RESTART IDENTITY");
+        jdbc.execute("TRUNCATE TABLE order_messages, orders, advices, games, users RESTART IDENTITY");
     }
 
     @Test
@@ -117,6 +118,8 @@ class ItemBroApiTest {
                 PRICE, AdviceStatus.ACTIVE));
         Advice second = advices.save(new Advice("Второй предмет", secondGame, secondSeller,
                 PRICE, AdviceStatus.ACTIVE));
+        Map<Long, String> expectedSellers = Map.of(first.getId(), firstSeller.getUsername(),
+                second.getId(), secondSeller.getUsername());
 
         for (Advice advice : List.of(first, second)) {
             mvc.perform(get("/api/advices").param("gameId", advice.getGame().getId().toString())
@@ -126,7 +129,7 @@ class ItemBroApiTest {
                     .andExpect(jsonPath("$.content.length()").value(1))
                     .andExpect(jsonPath("$.content[0].id").value(advice.getId().intValue()))
                     .andExpect(jsonPath("$.content[0].game.id").value(advice.getGame().getId().intValue()))
-                    .andExpect(jsonPath("$.content[0].userSeller.username").value(advice.getSeller().getUsername()));
+                    .andExpect(jsonPath("$.content[0].userSeller.username").value(expectedSellers.get(advice.getId())));
         }
     }
 

@@ -71,6 +71,9 @@ export default function OrderChat({
     let stopped = false;
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let initialized = false;
+    let historyError = false;
+    let syncing: Promise<void> | undefined;
     let failures = 0;
     // Только прочитанная история двигает курсор. Ответ на POST во время
     // разрыва может иметь больший ID, чем ещё не полученные чужие сообщения.
@@ -84,6 +87,7 @@ export default function OrderChat({
     setStatus("Загрузка истории…");
     const report = (reason: unknown) => {
       if (stopped) return;
+      historyError = true;
       setStatus("Недоступен");
       setError(
         reason instanceof Error ? reason.message : "Не удалось загрузить чат.",
@@ -95,9 +99,10 @@ export default function OrderChat({
       }
       if (
         reason instanceof ApiError &&
-        (reason.status === 401 || reason.status === 403)
+        [401, 403, 404].includes(reason.status)
       ) {
         stopped = true;
+        clearTimeout(timer);
         socket?.close();
       }
     };
@@ -115,9 +120,28 @@ export default function OrderChat({
         next = newest;
       }
     };
+    const refreshHistory = () => {
+      if (stopped || !initialized) return Promise.resolve();
+      if (syncing) return syncing;
+      syncing = sync(syncedId)
+        .then(() => {
+          if (stopped) return;
+          historyError = false;
+          setError("");
+          setStatus(
+            socket?.readyState === WebSocket.OPEN
+              ? "Подключён"
+              : "Автообновление",
+          );
+        })
+        .catch(report)
+        .finally(() => {
+          syncing = undefined;
+        });
+      return syncing;
+    };
     const connect = () => {
       if (stopped) return;
-      const cursor = syncedId;
       const url = new URL(
         `/api/orders/${order.id}/chat/ws`,
         window.location.href,
@@ -127,8 +151,8 @@ export default function OrderChat({
       socket.onopen = () => {
         if (stopped) return;
         failures = 0;
-        setStatus("Подключён");
-        void sync(cursor).catch(report);
+        if (!historyError) setStatus("Подключён");
+        void refreshHistory();
       };
       socket.onmessage = (event) => {
         if (stopped) return;
@@ -141,14 +165,26 @@ export default function OrderChat({
         }
       };
       socket.onerror = () => {
-        if (!stopped) setStatus("Переподключение…");
+        if (!stopped && !historyError) setStatus("Автообновление");
       };
       socket.onclose = () => {
         if (stopped) return;
-        setStatus("Переподключение…");
+        if (!historyError) setStatus("Автообновление");
+        if (!document.hidden) void refreshHistory();
         timer = setTimeout(connect, Math.min(1000 * 2 ** failures++, 15000));
       };
     };
+    // Пока сокета нет или он оборвался, новые сообщения приходят через REST.
+    // Один запрос синхронизации за раз сохраняет порядок движения курсора.
+    const poll = setInterval(() => {
+      if (!document.hidden && socket?.readyState !== WebSocket.OPEN)
+        void refreshHistory();
+    }, 3000);
+    const resume = () => {
+      if (!document.hidden) void refreshHistory();
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", resume);
     void client
       .messages(order.id)
       .then((page) => {
@@ -157,7 +193,8 @@ export default function OrderChat({
         syncedId = page.items.at(-1)?.id ?? 0;
         setHasOlder(page.hasMore);
         setLoading(false);
-        setStatus("Подключение…");
+        initialized = true;
+        setStatus("Автообновление");
         connect();
       })
       .catch((reason) => {
@@ -168,6 +205,9 @@ export default function OrderChat({
       stopped = true;
       active.current = false;
       clearTimeout(timer);
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
       if (socket) {
         socket.onclose = null;
         socket.close();

@@ -110,7 +110,7 @@ class ProfileMediaApiTest {
 
     @BeforeEach
     void isolateDatabaseAndUploads() {
-        jdbc.execute("TRUNCATE TABLE orders, advices, games, users RESTART IDENTITY");
+        jdbc.execute("TRUNCATE TABLE order_messages, orders, advices, games, users RESTART IDENTITY");
         // В production путь пока задан в сервисах. Подменяем только его корень,
         // сохраняя настоящие файловые операции, Tika и транзакции PostgreSQL.
         storagePaths = mockStatic(Path.class, CALLS_REAL_METHODS);

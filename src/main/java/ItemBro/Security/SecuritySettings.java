@@ -66,11 +66,13 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.GET, "/api/orders/{id}").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/orders").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/user/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/{id}/messages").authenticated()
 
                         .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/orders/").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/games").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/orders/{id}/messages").authenticated()
 
                         .requestMatchers(HttpMethod.DELETE, "/api/advices/{id}").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/user/me/avatar").authenticated()

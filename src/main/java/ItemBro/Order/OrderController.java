@@ -1,9 +1,7 @@
 package ItemBro.Order;
 
 import ItemBro.Advice.DTO.AdviceIdBody;
-import ItemBro.Order.DTO.OrderDTO;
-import ItemBro.Order.DTO.OrderFeedbackBody;
-import ItemBro.Order.DTO.OrderResponseBody;
+import ItemBro.Order.DTO.*;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +14,10 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
-    public OrderController(OrderService orderService) {
+    private final OrderMessageService orderMessageService;
+    public OrderController(OrderService orderService,  OrderMessageService orderMessageService) {
         this.orderService = orderService;
+        this.orderMessageService = orderMessageService;
     }
 
     @PostMapping("/api/orders/")
@@ -70,5 +70,26 @@ public class OrderController {
     @GetMapping("/api/admin/orders")
     public ResponseEntity<List<OrderDTO>> getAllOrders() {
         return ResponseEntity.ok(orderService.getAllOrders());
+    }
+
+    @PostMapping("/api/orders/{id}/messages")
+    public ResponseEntity<MessageDTO> sendMessage(Principal principal, @PathVariable("id") Long id,
+                                                  @Valid @RequestBody MessageBody messageBody) {
+        AddMessageResult result = orderMessageService.addMessage(id, principal, messageBody);
+
+        if (result.result()) {
+            return ResponseEntity.status(201).body(result.message());
+        }
+
+        return ResponseEntity.ok(result.message());
+    }
+
+    @GetMapping("/api/orders/{id}/messages")
+    public ResponseEntity<MessagesDTO> getMessages(
+            Principal principal, @PathVariable("id") Long id,
+            @RequestParam(value = "limit", defaultValue = "50") int limit,
+            @RequestParam(value = "beforeId", required = false) Long beforeId,
+            @RequestParam(value = "afterId", required = false) Long afterId) {
+        return ResponseEntity.ok(orderMessageService.getMessages(principal, id, limit, beforeId, afterId));
     }
 }
