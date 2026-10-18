@@ -68,6 +68,8 @@ export type ChatMessage = {
   sender: PublicUser;
   text: string;
   sentAt: string;
+  messageType?: "USER" | "SYSTEM";
+  eventType?: string | null;
 };
 export type MessagePage = { items: ChatMessage[]; hasMore: boolean };
 export type OrderAction =

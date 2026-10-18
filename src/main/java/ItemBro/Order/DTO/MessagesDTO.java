@@ -1,6 +1,4 @@
-package ItemBro.Order;
-
-import ItemBro.Order.DTO.MessageDTO;
+package ItemBro.Order.DTO;
 
 import java.util.List;
 

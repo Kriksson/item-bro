@@ -23,6 +23,7 @@ export default function OrderWorkspace({
   onAction,
   onFeedback,
   onResponse,
+  onSystemEvent,
   focusChat = false,
   backLabel = "К заказам",
 }: {
@@ -35,6 +36,7 @@ export default function OrderWorkspace({
   onAction: (action: OrderAction) => Promise<void>;
   onFeedback: (rating: number, text: string) => Promise<void>;
   onResponse: (text: string) => Promise<void>;
+  onSystemEvent: () => void;
   focusChat?: boolean;
   backLabel?: string;
 }) {
@@ -292,6 +294,7 @@ export default function OrderWorkspace({
           order={order}
           account={account}
           client={client}
+          onSystemEvent={onSystemEvent}
         />
       </div>
       {adminAction && (

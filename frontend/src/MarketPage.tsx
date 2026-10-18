@@ -96,9 +96,9 @@ export default function MarketPage(props: Props) {
           <section className="hero" aria-label="Маркет">
             <div className="hero-copy">
               <h1>
-                Игровые
+                Цифровые
                 <br />
-                <span>предметы</span>
+                <span>товары</span>
               </h1>
               <button className="button" onClick={onCreate}>
                 <Plus size={17} />
@@ -111,12 +111,12 @@ export default function MarketPage(props: Props) {
         <section
           id="game-catalog"
           className="catalog-section"
-          aria-label="Каталог игр"
+          aria-label="Каталог игр и сервисов"
         >
           <div className="section-heading">
             <div>
               <CatalogHeading>
-                {isSelling ? "Мои объявления" : "Игры"}
+                {isSelling ? "Мои объявления" : "Игры и сервисы"}
                 <span className="heading-dot">.</span>
               </CatalogHeading>
             </div>
@@ -134,14 +134,14 @@ export default function MarketPage(props: Props) {
             <label className="search-field">
               <Search size={17} />
               <input
-                aria-label="Поиск игры"
-                placeholder="Найти игру"
+                aria-label="Поиск по каталогу"
+                placeholder="Найти игру или сервис"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
               {query && (
                 <button
-                  aria-label="Очистить поиск игры"
+                  aria-label="Очистить поиск по каталогу"
                   className="clear-search"
                   onClick={() => setQuery("")}
                 >
@@ -151,14 +151,14 @@ export default function MarketPage(props: Props) {
             </label>
           </div>
           {gamesLoading ? (
-            <div className="games-grid" aria-label="Загрузка игр">
+            <div className="games-grid" aria-label="Загрузка категорий">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="skeleton-card" />
               ))}
             </div>
           ) : gamesError ? (
             <Empty
-              title="Не удалось загрузить игры"
+              title="Не удалось загрузить каталог"
               description={gamesError}
               action={
                 <button className="button button-secondary" onClick={onRetry}>
@@ -167,14 +167,14 @@ export default function MarketPage(props: Props) {
               }
             />
           ) : !visibleGames.length ? (
-            <Empty title={query ? "Игра не найдена" : "Игр нет"} />
+            <Empty title={query ? "Категория не найдена" : "Каталог пуст"} />
           ) : (
             <div className="games-grid">
               {visibleGames.map((game) => (
                 <button
                   className={`game-card game-cover-theme-${game.id % 4}`}
                   key={game.id}
-                  aria-label={`Открыть игру ${game.name}`}
+                  aria-label={`Открыть категорию ${game.name}`}
                   onClick={() => onChooseGame(game.id)}
                 >
                   <Picture
@@ -235,8 +235,7 @@ export default function MarketPage(props: Props) {
       aria-label="Каталог объявлений"
     >
       <button className="text-button back-link" onClick={onBack}>
-        <ArrowLeft size={17} />
-        Ко всем играм
+        <ArrowLeft size={17} />В каталог
       </button>
       <div className="section-heading">
         <div>
@@ -443,7 +442,7 @@ export default function MarketPage(props: Props) {
       )}
       {isSelling && (
         <p className="subtle-note">
-          Показаны твои объявления на выбранной странице этой игры.
+          Показаны твои объявления на выбранной странице.
         </p>
       )}
     </section>

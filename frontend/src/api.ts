@@ -36,6 +36,8 @@ export function parseChatMessage(value: unknown, orderId: number): ChatMessage {
   if (!value || typeof value !== "object")
     throw new Error("Сервер вернул некорректное сообщение.");
   const message = value as ChatMessage;
+  const messageType =
+    message.messageType === undefined ? "USER" : message.messageType;
   if (
     !Number.isSafeInteger(message.id) ||
     message.id < 1 ||
@@ -46,10 +48,14 @@ export function parseChatMessage(value: unknown, orderId: number): ChatMessage {
     typeof message.text !== "string" ||
     !message.text.trim() ||
     typeof message.sentAt !== "string" ||
-    !Number.isFinite(Date.parse(message.sentAt))
+    !Number.isFinite(Date.parse(message.sentAt)) ||
+    (messageType !== "USER" && messageType !== "SYSTEM") ||
+    (messageType === "SYSTEM" &&
+      (typeof message.eventType !== "string" || !message.eventType.trim())) ||
+    (messageType === "USER" && message.eventType != null)
   )
     throw new Error("Сервер вернул некорректное сообщение.");
-  return message;
+  return { ...message, messageType };
 }
 
 export class ApiError extends Error {
@@ -238,10 +244,20 @@ export class ApiMarketplace implements Marketplace {
     return result;
   }
   async orders() {
-    const result = await this.request<Order[]>("/api/orders");
-    if (!Array.isArray(result))
-      throw new Error("Сервер вернул список заказов в неожиданном формате.");
-    return result;
+    try {
+      const result = await this.request<Order[]>("/api/orders");
+      if (!Array.isArray(result))
+        throw new Error("Сервер вернул список заказов в неожиданном формате.");
+      return result;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.status === 404 &&
+        error.message === "Заказы не найдены"
+      )
+        return [];
+      throw error;
+    }
   }
   advices(gameId: number, page: number) {
     return this.request<AdvicePage>(

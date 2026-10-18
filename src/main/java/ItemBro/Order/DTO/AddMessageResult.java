@@ -1,6 +1,4 @@
-package ItemBro.Order;
-
-import ItemBro.Order.DTO.MessageDTO;
+package ItemBro.Order.DTO;
 
 public record AddMessageResult(MessageDTO message, boolean result) {
 }

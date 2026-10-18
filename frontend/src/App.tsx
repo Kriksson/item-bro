@@ -109,6 +109,7 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const isAdmin = account?.role === "ADMIN";
+  const [orderRevision, setOrderRevision] = useState(0);
 
   useEffect(() => {
     const restoreProfile = () => {
@@ -262,6 +263,29 @@ export default function App() {
       cancelled = true;
     };
   }, [client, account?.name, refresh]);
+
+  useEffect(() => {
+    if (!orderRevision || page !== "order" || !activeOrder || !account) return;
+    let cancelled = false;
+    const id = activeOrder.id;
+    client
+      .order(id)
+      .then((fresh) => {
+        if (cancelled) return;
+        setActiveOrder((current) => (current?.id === id ? fresh : current));
+        rememberOrder(fresh);
+        updateBalance();
+      })
+      .catch(() => {
+        if (!cancelled)
+          setFormError(
+            "Не удалось обновить данные заказа. Открой заказ повторно.",
+          );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderRevision, client, page, account?.name, activeOrder?.id]);
 
   const rememberOrder = (order: Order) => {
     if (account && orderKind(order, account.name))
@@ -624,6 +648,7 @@ export default function App() {
                     orderReturnPage === "admin" ? "В управление" : "К заказам"
                   }
                   focusChat={focusChat}
+                  onSystemEvent={() => setOrderRevision((value) => value + 1)}
                   onAction={(action) => orderAction(activeOrder, action)}
                   onFeedback={(rating, text) =>
                     work(async () => {
@@ -669,14 +694,14 @@ export default function App() {
                   <div className="admin-grid">
                     <div className="panel">
                       <Gamepad2 size={28} />
-                      <h3>Каталог игр</h3>
+                      <h3>Каталог игр и сервисов</h3>
                       <button
                         className="button"
                         disabled={!account}
                         onClick={() => open({ kind: "new-game" })}
                       >
                         <Plus size={16} />
-                        Создать игру
+                        Создать категорию
                       </button>
                     </div>
                   </div>
@@ -685,7 +710,7 @@ export default function App() {
                       {formError}
                     </p>
                   )}
-                  <h2 className="admin-section-title">Игры на площадке</h2>
+                  <h2 className="admin-section-title">Категории на площадке</h2>
                   <div className="managed-games">
                     {games.map((game) => (
                       <div className="managed-game" key={game.id}>
@@ -696,14 +721,14 @@ export default function App() {
                         </span>
                         <button
                           className="icon-button"
-                          aria-label={`Изображение игры ${game.name}`}
+                          aria-label={`Изображение категории ${game.name}`}
                           onClick={() => open({ kind: "game-image", game })}
                         >
                           <ImagePlus size={17} />
                         </button>
                         <button
                           className="icon-button"
-                          aria-label={`Архивировать игру ${game.name}`}
+                          aria-label={`Архивировать категорию ${game.name}`}
                           disabled={!account}
                           onClick={() => open({ kind: "archive-game", game })}
                         >
@@ -759,7 +784,7 @@ export default function App() {
                     : dialog.kind === "settings"
                       ? "Аккаунт"
                       : dialog.kind === "new-game"
-                        ? "Новая игра"
+                        ? "Новая категория"
                         : dialog.kind === "game-image"
                           ? dialog.game.name
                           : dialog.kind === "buy"
@@ -768,7 +793,7 @@ export default function App() {
                               ? "Объявление"
                               : dialog.kind === "archive-advice"
                                 ? "Архивировать объявление?"
-                                : "Архивировать игру?"
+                                : "Архивировать категорию?"
             }
             onClose={close}
           >
@@ -935,12 +960,12 @@ export default function App() {
                       );
                       rememberGame(game);
                       setDialog(null);
-                      notify("Игра создана.");
+                      notify("Категория создана.");
                     })
                   }
                 >
                   <label>
-                    Название игры
+                    Название категории
                     <input
                       name="name"
                       required
@@ -949,7 +974,7 @@ export default function App() {
                     />
                   </label>
                   <button className="button button-full">
-                    Создать игру <Plus size={16} />
+                    Создать категорию <Plus size={16} />
                   </button>
                 </form>
               )}
@@ -977,10 +1002,10 @@ export default function App() {
                 >
                   <p className="form-intro">До 5 активных объявлений.</p>
                   <label>
-                    Игра
+                    Категория
                     <select name="game" required defaultValue={gameId ?? ""}>
                       <option disabled value="">
-                        Выбери игру
+                        Выбери категорию
                       </option>
                       {games.map((game) => (
                         <option key={game.id} value={game.id}>
@@ -990,7 +1015,7 @@ export default function App() {
                     </select>
                   </label>
                   <label>
-                    Название предмета
+                    Название объявления
                     <input
                       name="name"
                       required
@@ -1016,7 +1041,7 @@ export default function App() {
                     Опубликовать объявление <ArrowUpRight size={16} />
                   </button>
                   {!games.length && (
-                    <p className="subtle-note">Нет доступных игр.</p>
+                    <p className="subtle-note">Нет доступных категорий.</p>
                   )}
                 </form>
               )}
@@ -1139,7 +1164,7 @@ export default function App() {
               )}
               {dialog.kind === "game-image" && isAdmin && (
                 <ImageEditor
-                  label="Изображение игры"
+                  label="Изображение категории"
                   onBusyChange={setBusy}
                   currentUrl={
                     games.find((game) => game.id === dialog.game.id)?.imageUrl
@@ -1172,12 +1197,12 @@ export default function App() {
                         }
                         setDialog(null);
                         setRefresh((value) => value + 1);
-                        notify("Игра отправлена в архив.");
+                        notify("Категория отправлена в архив.");
                       })
                     }
                   >
                     <Trash2 size={16} />
-                    Архивировать игру
+                    Архивировать категорию
                   </button>
                 </>
               )}

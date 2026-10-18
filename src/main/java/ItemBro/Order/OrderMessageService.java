@@ -2,8 +2,10 @@ package ItemBro.Order;
 
 import ItemBro.Exception.*;
 import ItemBro.Order.Chat.OrderMessageCreatedEvent;
+import ItemBro.Order.DTO.AddMessageResult;
 import ItemBro.Order.DTO.MessageBody;
 import ItemBro.Order.DTO.MessageDTO;
+import ItemBro.Order.DTO.MessagesDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
 import ItemBro.User.UserRole;
@@ -12,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.Principal;
@@ -25,8 +28,9 @@ public class OrderMessageService {
     private final OrderMessageRepository orderMessageRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
-    public OrderMessageService(OrderRepository orderRepository,  UserRepository userRepository,
-                               OrderMessageRepository orderMessageRepository,  ApplicationEventPublisher publisher) {
+
+    public OrderMessageService(OrderRepository orderRepository, UserRepository userRepository,
+                               OrderMessageRepository orderMessageRepository, ApplicationEventPublisher publisher) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.orderMessageRepository = orderMessageRepository;
@@ -47,7 +51,7 @@ public class OrderMessageService {
         User userSeller = order.getSeller();
 
         if (user.getRole() != UserRole.ADMIN) {
-            if (!user.getId().equals(userBuyer.getId()) &&  !user.getId().equals(userSeller.getId())) {
+            if (!user.getId().equals(userBuyer.getId()) && !user.getId().equals(userSeller.getId())) {
                 throw new NoPermissionsException("Нет прав для отправки сообщения");
             }
         }
@@ -73,8 +77,6 @@ public class OrderMessageService {
         MessageDTO messageDTO = new MessageDTO(messageFromDB, messageFromDB.getOrder());
 
         publisher.publishEvent(new OrderMessageCreatedEvent(messageDTO));
-
-
 
         return new AddMessageResult(messageDTO, true);
     }
@@ -131,5 +133,25 @@ public class OrderMessageService {
         }
 
         return new MessagesDTO(items, messageDTOSlice.hasNext());
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void addSystemMessage(Order order, User user, EventType eventType) {
+        String text = switch (eventType) {
+            case ORDER_CREATED -> "Заказ создан";
+            case ORDER_CONFIRMED -> "Выполнение заказа подтверждено";
+            case ORDER_CANCELED -> "Заказ отменён";
+            case ORDER_REOPENED -> "Заказ повторно открыт";
+            case ORDER_REFUNDED -> "Деньги возвращены покупателю";
+            case FEEDBACK_ADDED -> "Оставлен отзыв по заказу";
+            case FEEDBACK_UPDATED -> "Обновлен отзыв по заказу";
+            case SELLER_RESPONSE_ADDED -> "Ответ на отзыв добавлен";
+            case SELLER_RESPONSE_UPDATED -> "Ответ на отзыв обновлен";
+        };
+        OrderMessage orderMessage = new OrderMessage(order, user, text, MessageType.SYSTEM, eventType);
+        OrderMessage messageFromDB = orderMessageRepository.save(orderMessage);
+
+        MessageDTO messageDTO = new MessageDTO(messageFromDB, messageFromDB.getOrder());
+        publisher.publishEvent(new OrderMessageCreatedEvent(messageDTO));
     }
 }

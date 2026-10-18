@@ -15,10 +15,12 @@ export default function OrderChat({
   order,
   account,
   client,
+  onSystemEvent,
 }: {
   order: Order;
   account: Account;
   client: Marketplace;
+  onSystemEvent?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -36,6 +38,8 @@ export default function OrderChat({
   const firstId = useRef(0);
   const pending = useRef<{ text: string; id: string } | null>(null);
   const active = useRef(true);
+  const systemEventHandler = useRef(onSystemEvent);
+  systemEventHandler.current = onSystemEvent;
   const counterpart =
     order.userBuyerDTO.username === account.name
       ? order.adviceDTO.userSeller
@@ -75,6 +79,21 @@ export default function OrderChat({
     let historyError = false;
     let syncing: Promise<void> | undefined;
     let failures = 0;
+    const knownSystemMessages = new Set<number>();
+    const acceptMessages = (items: ChatMessage[]) => {
+      let changed = false;
+      for (const message of items) {
+        if (
+          message.messageType === "SYSTEM" &&
+          !knownSystemMessages.has(message.id)
+        ) {
+          knownSystemMessages.add(message.id);
+          changed = true;
+        }
+      }
+      merge(items);
+      if (changed) systemEventHandler.current?.();
+    };
     // Только прочитанная история двигает курсор. Ответ на POST во время
     // разрыва может иметь больший ID, чем ещё не полученные чужие сообщения.
     let syncedId = 0;
@@ -111,7 +130,7 @@ export default function OrderChat({
       while (!stopped) {
         const page = await client.messages(order.id, { afterId: next });
         if (stopped) return;
-        merge(page.items);
+        acceptMessages(page.items);
         const newest = page.items.at(-1)?.id;
         if (newest) syncedId = Math.max(syncedId, newest);
         if (!page.hasMore) return;
@@ -164,7 +183,7 @@ export default function OrderChat({
         try {
           const frame = JSON.parse(String(event.data));
           if (frame.type !== "message.created") return;
-          merge([parseChatMessage(frame.message, order.id)]);
+          acceptMessages([parseChatMessage(frame.message, order.id)]);
         } catch {
           setSendError("Не удалось прочитать новое сообщение. Обнови чат.");
         }
@@ -194,7 +213,8 @@ export default function OrderChat({
       .messages(order.id)
       .then((page) => {
         if (stopped) return;
-        merge(page.items);
+        // Действие могло завершиться между загрузкой заказа и его истории.
+        acceptMessages(page.items);
         syncedId = page.items.at(-1)?.id ?? 0;
         setHasOlder(page.hasMore);
         setLoading(false);
@@ -317,21 +337,37 @@ export default function OrderChat({
             <h2>Сообщений нет</h2>
           </div>
         )}
-        {messages.map((message) => (
-          <article
-            className={`chat-message${message.sender.username === account.name ? " chat-message-own" : " chat-message-other"}`}
-            key={message.id}
-          >
-            <span className="chat-message-author">
-              <Avatar user={message.sender} className="message-avatar" />
-              <Username user={message.sender} account={account} />
-            </span>
-            <p>{message.text}</p>
-            <time dateTime={message.sentAt}>
-              {time.format(new Date(message.sentAt))}
-            </time>
-          </article>
-        ))}
+        {messages.map((message) =>
+          message.messageType === "SYSTEM" ? (
+            <article
+              className="chat-system-message"
+              key={message.id}
+              aria-label="Системное сообщение"
+            >
+              <p>{message.text}</p>
+              <footer>
+                <Username user={message.sender} account={account} />
+                <time dateTime={message.sentAt}>
+                  {time.format(new Date(message.sentAt))}
+                </time>
+              </footer>
+            </article>
+          ) : (
+            <article
+              className={`chat-message${message.sender.username === account.name ? " chat-message-own" : " chat-message-other"}`}
+              key={message.id}
+            >
+              <span className="chat-message-author">
+                <Avatar user={message.sender} className="message-avatar" />
+                <Username user={message.sender} account={account} />
+              </span>
+              <p>{message.text}</p>
+              <time dateTime={message.sentAt}>
+                {time.format(new Date(message.sentAt))}
+              </time>
+            </article>
+          ),
+        )}
       </div>
       <form
         className="chat-composer"

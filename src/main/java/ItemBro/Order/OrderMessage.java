@@ -28,8 +28,16 @@ public class OrderMessage {
     @Column(name = "sent_at", nullable = false)
     private Instant sentAt;
 
-    @Column(name = "client_message_id", nullable = false)
+    @Column(name = "client_message_id")
     private UUID clientMessageId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "message_type", nullable = false)
+    private MessageType messageType = MessageType.USER;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "event_type")
+    private EventType eventType = null;
 
     protected OrderMessage() {}
     public OrderMessage(Order order, User sender, String text, UUID clientMessageId) {
@@ -40,12 +48,35 @@ public class OrderMessage {
         this.clientMessageId = clientMessageId;
     }
 
+    public OrderMessage(
+            Order order,
+            User sender,
+            String text,
+            MessageType messageType,
+            EventType eventType
+    ) {
+        this.order = order;
+        this.sender = sender;
+        this.text = text;
+        this.sentAt = Instant.now();
+        this.messageType = messageType;
+        this.eventType = eventType;
+    }
+
     public Long getId() {
         return id;
     }
 
     public Order getOrder() {
         return order;
+    }
+
+    public MessageType getMessageType() {
+        return messageType;
+    }
+
+    public EventType getEventType() {
+        return eventType;
     }
 
     public User getSender() {

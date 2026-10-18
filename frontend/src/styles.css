@@ -1301,6 +1301,30 @@ blockquote small {
   align-self: center;
   padding-block: 8px;
 }
+.chat-system-message {
+  align-self: stretch;
+  padding: 12px 8px;
+  text-align: center;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.chat-system-message p {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.chat-system-message footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.chat-system-message .username {
+  font-size: inherit;
+}
 .chat-message {
   max-width: 86%;
   padding: 13px 16px 9px;

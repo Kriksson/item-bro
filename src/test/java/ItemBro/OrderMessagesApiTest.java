@@ -6,6 +6,8 @@ import ItemBro.Advice.AdviceStatus;
 import ItemBro.Game.Game;
 import ItemBro.Game.GameRepository;
 import ItemBro.Order.Order;
+import ItemBro.Order.EventType;
+import ItemBro.Order.OrderMessageService;
 import ItemBro.Order.OrderRepository;
 import ItemBro.Order.OrderStatus;
 import ItemBro.User.User;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,6 +35,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -46,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -56,6 +63,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -89,6 +97,8 @@ class OrderMessagesApiTest {
     @Autowired GameRepository games;
     @Autowired AdviceRepository advices;
     @Autowired OrderRepository orders;
+    @Autowired OrderMessageService messageService;
+    @Autowired PlatformTransactionManager transactionManager;
 
     private User buyer;
     private User seller;
@@ -118,6 +128,8 @@ class OrderMessagesApiTest {
         JsonNode response = responseBody(mvc.perform(send(order, sender, "  Добрый день!  ", REQUEST_ID))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderId").value(order.getId().intValue()))
+                .andExpect(jsonPath("$.messageType").value("USER"))
+                .andExpect(jsonPath("$.eventType").doesNotExist())
                 .andExpect(jsonPath("$.sender.username").value(username))
                 .andExpect(jsonPath("$.sender.userRole").value(sender.getRole().name()))
                 .andExpect(jsonPath("$.sender.avatarUrl").value(sender.getAvatarUrl()))
@@ -131,6 +143,8 @@ class OrderMessagesApiTest {
         assertThat(stored.get("order_id")).isEqualTo(order.getId());
         assertThat(stored.get("sender_id")).isEqualTo(sender.getId());
         assertThat(stored.get("client_message_id")).isEqualTo(REQUEST_ID);
+        assertThat(stored.get("message_type")).isEqualTo("USER");
+        assertThat(stored.get("event_type")).isNull();
         assertThat(stored.get("text")).isEqualTo("Добрый день!");
         assertThat(Duration.between(((Timestamp) stored.get("sent_at")).toInstant(), sentAt).abs())
                 .isLessThan(Duration.ofMillis(1));
@@ -431,6 +445,286 @@ class OrderMessagesApiTest {
     void acceptsBoundaryLimitsAndCalculatesHasMore(int limit) throws Exception {
         List<Long> ids = seedInterleavedMessages(limit);
         assertPage(readPage(history().param("limit", Integer.toString(limit))), ids, false);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"alex", "admin"})
+    @DisplayName("Событие создания: сохраняется вместе с новым заказом, автором становится покупатель")
+    void creationSavesSystemMessageWithActualBuyer(String username) throws Exception {
+        var result = mvc.perform(post("/api/orders/").with(user(username)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("id", order.getAdvice().getId()))))
+                .andExpect(status().isCreated()).andReturn();
+        long orderId = responseBody(result).path("id").asLong();
+        assertSystemMessage(orderId, username, EventType.ORDER_CREATED);
+        assertThat(users.findByUsername(username).orElseThrow().getBalance()).isEqualByComparingTo("75");
+    }
+
+    static Stream<Arguments> statusActions() {
+        return Stream.of(
+                Arguments.of("/api/orders/{id}/cancel", "maria", OrderStatus.OPENED, EventType.ORDER_CANCELED, OrderStatus.REFUND),
+                Arguments.of("/api/orders/{id}/cancel", "admin", OrderStatus.OPENED, EventType.ORDER_CANCELED, OrderStatus.REFUND),
+                Arguments.of("/api/orders/{id}/confirm", "alex", OrderStatus.OPENED, EventType.ORDER_CONFIRMED, OrderStatus.CLOSED),
+                Arguments.of("/api/orders/{id}/confirm", "admin", OrderStatus.OPENED, EventType.ORDER_CONFIRMED, OrderStatus.CLOSED),
+                Arguments.of("/api/admin/orders/{id}/reopen", "admin", OrderStatus.CLOSED, EventType.ORDER_REOPENED, OrderStatus.OPENED),
+                Arguments.of("/api/admin/orders/{id}/confirm", "admin", OrderStatus.OPENED, EventType.ORDER_CONFIRMED, OrderStatus.CLOSED),
+                Arguments.of("/api/admin/orders/{id}/refund", "admin", OrderStatus.OPENED, EventType.ORDER_REFUNDED, OrderStatus.REFUND));
+    }
+
+    static Stream<Arguments> serializedActions() {
+        return Stream.concat(statusActions(), Stream.of(
+                Arguments.of("/api/orders/{id}/feedback", "alex", OrderStatus.OPENED, EventType.FEEDBACK_ADDED, OrderStatus.OPENED),
+                Arguments.of("/api/orders/{id}/response", "maria", OrderStatus.OPENED, EventType.SELLER_RESPONSE_ADDED, OrderStatus.OPENED)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusActions")
+    @DisplayName("События статуса: правильный автор и тип, повтор отклоняется без второго сообщения")
+    void statusActionSavesOneEvent(String path, String username, OrderStatus initial,
+                                 EventType eventType, OrderStatus expected) throws Exception {
+        changeStatus(initial);
+        mvc.perform(action(path, order.getId(), username)).andExpect(status().isNoContent());
+        assertSystemMessage(order.getId(), username, eventType);
+        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(expected);
+        var balances = jdbc.queryForList("SELECT id, balance, version FROM users ORDER BY id");
+        mvc.perform(action(path, order.getId(), username)).andExpect(status().isConflict());
+        assertThat(messageCount()).isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT id, balance, version FROM users ORDER BY id")).isEqualTo(balances);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"alex,OPENED", "admin,OPENED", "alex,CLOSED", "admin,CLOSED", "alex,REFUND", "admin,REFUND"})
+    @DisplayName("События отзыва: добавление, изменение и повтор одинаковых данных имеют собственного автора")
+    void feedbackAddsAndUpdatesEventsIncludingUnchangedRetry(String username, OrderStatus state) throws Exception {
+        changeStatus(state);
+        String path = "/api/orders/{id}/feedback";
+        mvc.perform(action(path, order.getId(), username)).andExpect(status().isNoContent());
+        String changed = mapper.writeValueAsString(Map.of("rating", 4, "feedbackText", "Дополненный отзыв"));
+        for (int i = 0; i < 2; i++)
+            mvc.perform(action(path, order.getId(), username).content(changed)).andExpect(status().isNoContent());
+        assertEvents(username, EventType.FEEDBACK_ADDED, EventType.FEEDBACK_UPDATED, EventType.FEEDBACK_UPDATED);
+        Order stored = orders.findById(order.getId()).orElseThrow();
+        assertThat(stored.getRating()).isEqualTo(4);
+        assertThat(stored.getFeedback()).isEqualTo("Дополненный отзыв");
+        assertThat(stored.getStatus()).isEqualTo(state);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"maria,OPENED", "admin,OPENED", "maria,CLOSED", "admin,CLOSED", "maria,REFUND", "admin,REFUND"})
+    @DisplayName("События ответа: продавец и администратор добавляют, изменяют и повторно сохраняют ответ")
+    void sellerResponseEventsUseActualActorAndNeutralText(String username, OrderStatus state) throws Exception {
+        changeStatus(state);
+        jdbc.update("UPDATE orders SET rating=5, feedback='Отзыв' WHERE id=?", order.getId());
+        String path = "/api/orders/{id}/response";
+        mvc.perform(action(path, order.getId(), username)).andExpect(status().isNoContent());
+        for (int i = 0; i < 2; i++)
+            mvc.perform(action(path, order.getId(), username)
+                            .content(mapper.writeValueAsString(Map.of("responseText", "Дополненный ответ"))))
+                    .andExpect(status().isNoContent());
+        assertEvents(username, EventType.SELLER_RESPONSE_ADDED, EventType.SELLER_RESPONSE_UPDATED, EventType.SELLER_RESPONSE_UPDATED);
+        assertThat(jdbc.queryForList("SELECT text FROM order_messages ORDER BY id", String.class))
+                .allSatisfy(text -> assertThat(text).doesNotContain("Продавец"));
+        assertThat(orders.findById(order.getId()).orElseThrow().getSellerResponse()).isEqualTo("Дополненный ответ");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "/api/orders/{id}/cancel,maria", "/api/orders/{id}/confirm,alex",
+            "/api/orders/{id}/feedback,alex", "/api/orders/{id}/response,maria",
+            "/api/admin/orders/{id}/reopen,admin", "/api/admin/orders/{id}/confirm,admin",
+            "/api/admin/orders/{id}/refund,admin"})
+    @DisplayName("Ошибки действий: 401, 403, 404 и невалидный ID не оставляют системных записей")
+    void rejectedActionsDoNotCreateSystemMessages(String path, String username) throws Exception {
+        var before = jdbc.queryForMap("SELECT * FROM orders WHERE id=?", order.getId());
+        var balances = jdbc.queryForList("SELECT id, balance, version FROM users ORDER BY id");
+        mvc.perform(patch(path, order.getId()).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(actionBody(path))).andExpect(status().isUnauthorized());
+        mvc.perform(patch(path, order.getId()).with(user(username).roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(actionBody(path)))
+                .andExpect(status().isForbidden());
+        mvc.perform(action(path, order.getId(), outsider.getUsername())).andExpect(status().isForbidden());
+        mvc.perform(action(path, Long.MAX_VALUE, username)).andExpect(status().isNotFound());
+        mvc.perform(patch(path, "abc").with(user(username).roles("ADMIN")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(actionBody(path)))
+                .andExpect(status().isBadRequest());
+        assertThat(messageCount()).isZero();
+        assertThat(jdbc.queryForMap("SELECT * FROM orders WHERE id=?", order.getId())).isEqualTo(before);
+        assertThat(jdbc.queryForList("SELECT id, balance, version FROM users ORDER BY id")).isEqualTo(balances);
+    }
+
+    @Test
+    @DisplayName("Ошибки бизнеса и валидации: нет средств, объявления, отзыва или корректного тела — нет события")
+    void invalidActionsDoNotLeaveEventsOrChangeBalances() throws Exception {
+        jdbc.update("UPDATE users SET balance=0 WHERE id=?", buyer.getId());
+        String body = mapper.writeValueAsString(Map.of("id", order.getAdvice().getId()));
+        mvc.perform(post("/api/orders/").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/orders/").with(user(buyer.getUsername()))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        for (long adviceId : List.of(order.getAdvice().getId(), Long.MAX_VALUE))
+            mvc.perform(post("/api/orders/").with(user(buyer.getUsername())).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("id", adviceId))))
+                    .andExpect(status().is(adviceId == Long.MAX_VALUE ? 404 : 409));
+        mvc.perform(action("/api/orders/{id}/response", order.getId(), seller.getUsername()))
+                .andExpect(status().isConflict());
+        mvc.perform(action("/api/orders/{id}/feedback", order.getId(), buyer.getUsername())
+                        .content("{\"rating\":6,\"feedbackText\":\"\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(messageCount()).isZero();
+        assertThat(orders.count()).isEqualTo(2);
+        assertThat(users.findById(buyer.getId()).orElseThrow().getBalance()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("История: USER и SYSTEM имеют общие курсоры, правильные DTO и изоляцию по заказу")
+    void mixedHistoryUsesTheSamePaginationAndKeepsSystemMetadata() throws Exception {
+        long first = seedMessage(order, buyer, "Начало", UUID.randomUUID());
+        mvc.perform(action("/api/orders/{id}/feedback", order.getId(), buyer.getUsername())).andExpect(status().isNoContent());
+        long feedback = jdbc.queryForObject("SELECT max(id) FROM order_messages", Long.class);
+        seedMessage(otherOrder, outsider, "Чужая история", UUID.randomUUID());
+        mvc.perform(action("/api/orders/{id}/response", order.getId(), admin.getUsername())).andExpect(status().isNoContent());
+        long response = jdbc.queryForObject("SELECT max(id) FROM order_messages", Long.class);
+        long last = responseBody(mvc.perform(send(order, seller, "Спасибо", UUID.randomUUID()))
+                .andExpect(status().isCreated()).andReturn()).path("id").asLong();
+
+        JsonNode latest = readPage(history().param("limit", "2"));
+        assertPage(latest, List.of(response, last), true);
+        assertThat(latest.path("items").get(0).path("messageType").asText()).isEqualTo("SYSTEM");
+        assertThat(latest.path("items").get(0).path("eventType").asText()).isEqualTo("SELLER_RESPONSE_ADDED");
+        assertThat(latest.path("items").get(0).path("sender").path("userRole").asText()).isEqualTo("ADMIN");
+        assertThat(latest.path("items").get(1).path("messageType").asText()).isEqualTo("USER");
+        assertThat(latest.path("items").get(1).path("eventType").isNull()).isTrue();
+        assertPage(readPage(history().param("beforeId", Long.toString(response)).param("limit", "2")), List.of(first, feedback), false);
+        assertPage(readPage(history().param("afterId", Long.toString(first)).param("limit", "1")), List.of(feedback), true);
+        assertPage(readPage(history().param("afterId", Long.toString(feedback))), List.of(response, last), false);
+    }
+
+    @Test
+    @DisplayName("Обычный POST не позволяет подменить тип сообщения на SYSTEM")
+    void messagePostCannotForgeSystemEvent() throws Exception {
+        mvc.perform(send(order, buyer, "Заказ подтверждён", REQUEST_ID).content(mapper.writeValueAsString(Map.of(
+                        "text", "Заказ подтверждён", "clientMessageId", REQUEST_ID,
+                        "messageType", "SYSTEM", "eventType", "ORDER_CONFIRMED"))))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.messageType").value("USER"))
+                .andExpect(jsonPath("$.eventType").doesNotExist());
+        assertThat(jdbc.queryForObject("SELECT message_type FROM order_messages", String.class)).isEqualTo("USER");
+        assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.OPENED);
+    }
+
+    @Test
+    @DisplayName("Системная запись требует транзакции действия")
+    void systemMessageCannotCommitInItsOwnTransaction() {
+        assertThatThrownBy(() -> messageService.addSystemMessage(order, admin, EventType.ORDER_REOPENED))
+                .isInstanceOf(IllegalTransactionStateException.class);
+        assertThat(messageCount()).isZero();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"USER,false,", "USER,true,ORDER_CONFIRMED", "SYSTEM,true,ORDER_CONFIRMED",
+            "SYSTEM,false,", "OTHER,true,"})
+    @DisplayName("База данных отклоняет несовместимые тип, событие и клиентский UUID сообщения")
+    void databaseRejectsInvalidMessageKinds(String type, boolean hasClientId, String eventType) {
+        UUID clientId = null;
+        if (hasClientId) clientId = UUID.randomUUID();
+        UUID requestId = clientId;
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO order_messages(order_id, sender_id, text, sent_at, client_message_id, message_type, event_type)
+                VALUES (?, ?, 'Невалидная запись', now(), ?, ?, ?)
+                """, order.getId(), buyer.getId(), requestId, type, eventType))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("chk_order_messages_type");
+        assertThat(messageCount()).isZero();
+    }
+
+    @ParameterizedTest
+    @MethodSource("serializedActions")
+    @DisplayName("Параллельность: действие удерживает заказ до коммита, обычное сообщение получает следующий ID")
+    void systemAndUserMessagesCommitInCursorOrder(String path, String username, OrderStatus initial,
+                                                 EventType eventType, OrderStatus expected) throws Exception {
+        changeStatus(initial);
+        if (path.endsWith("/response"))
+            jdbc.update("UPDATE orders SET rating=5, feedback='Отзыв' WHERE id=?", order.getId());
+        long cursor = seedMessage(order, buyer, "До действия", UUID.randomUUID());
+        var saved = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var system = executor.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(tx -> {
+                try {
+                    mvc.perform(action(path, order.getId(), username)).andExpect(status().isNoContent());
+                    saved.countDown();
+                    if (!release.await(10, TimeUnit.SECONDS)) throw new AssertionError("Коммит не был разрешён");
+                } catch (Exception e) { throw new RuntimeException(e); }
+            }));
+            assertThat(saved.await(10, TimeUnit.SECONDS)).isTrue();
+            var regular = executor.submit(() -> mvc.perform(send(order, buyer, "После действия", UUID.randomUUID())).andReturn());
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(jdbc.queryForObject("""
+                    SELECT count(*) FROM pg_stat_activity
+                    WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock'
+                    """, Long.class)).isEqualTo(1));
+            assertPage(readPage(history().param("afterId", Long.toString(cursor))), List.of(), false);
+            release.countDown();
+            system.get(10, TimeUnit.SECONDS);
+            assertThat(regular.get(10, TimeUnit.SECONDS).getResponse().getStatus()).isEqualTo(201);
+            JsonNode items = readPage(history().param("afterId", Long.toString(cursor))).path("items");
+            assertThat(items.size()).isEqualTo(2);
+            assertThat(items.get(0).path("eventType").asText()).isEqualTo(eventType.name());
+            assertThat(items.get(1).path("messageType").asText()).isEqualTo("USER");
+            assertThat(items.get(0).path("id").asLong()).isLessThan(items.get(1).path("id").asLong());
+            assertThat(orders.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(expected);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private MockHttpServletRequestBuilder action(String path, long id, String username) {
+        String role = "USER";
+        if (username.equals(admin.getUsername())) role = "ADMIN";
+        return patch(path, id).with(user(username).roles(role)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(actionBody(path));
+    }
+
+    private String actionBody(String path) {
+        if (path.endsWith("/feedback")) return "{\"rating\":5,\"feedbackText\":\"Отзыв\"}";
+        if (path.endsWith("/response")) return "{\"responseText\":\"Спасибо за отзыв\"}";
+        return "";
+    }
+
+    private void assertSystemMessage(long orderId, String username, EventType eventType) throws Exception {
+        JsonNode history = responseBody(mvc.perform(get("/api/orders/{id}/messages", orderId).with(user(username)))
+                .andExpect(status().isOk()).andReturn());
+        assertThat(history.path("items").size()).isEqualTo(1);
+        JsonNode message = history.path("items").get(0);
+        assertThat(message.path("messageType").asText()).isEqualTo("SYSTEM");
+        assertThat(message.path("eventType").asText()).isEqualTo(eventType.name());
+        assertThat(message.path("orderId").asLong()).isEqualTo(orderId);
+        assertThat(message.path("sender").path("username").asText()).isEqualTo(username);
+        User actor = users.findByUsername(username).orElseThrow();
+        assertThat(message.path("sender").path("userRole").asText()).isEqualTo(actor.getRole().name());
+        assertThat(message.path("sender").path("avatarUrl").asText()).isEqualTo(actor.getAvatarUrl());
+        assertThat(message.path("sender").has("passwordHash")).isFalse();
+        assertThat(message.path("text").asText()).isNotBlank();
+        Instant.parse(message.path("sentAt").asText());
+        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM order_messages WHERE id=?", message.path("id").asLong());
+        assertThat(row.get("order_id")).isEqualTo(orderId);
+        assertThat(row.get("sender_id")).isEqualTo(actor.getId());
+        assertThat(row.get("message_type")).isEqualTo("SYSTEM");
+        assertThat(row.get("event_type")).isEqualTo(eventType.name());
+        assertThat(row.get("client_message_id")).isNull();
+    }
+
+    private void assertEvents(String username, EventType... expected) throws Exception {
+        JsonNode items = readPage(history()).path("items");
+        List<String> types = new ArrayList<>();
+        for (JsonNode item : items) {
+            assertThat(item.path("messageType").asText()).isEqualTo("SYSTEM");
+            assertThat(item.path("sender").path("username").asText()).isEqualTo(username);
+            types.add(item.path("eventType").asText());
+        }
+        assertThat(types).containsExactlyElementsOf(Stream.of(expected).map(Enum::name).toList());
     }
 
     private User savedUser(String username, UserRole role) {

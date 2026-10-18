@@ -389,7 +389,7 @@ async function login(page: Page, name = "buyer") {
 
 async function selectGame(page: Page) {
   await page
-    .getByRole("button", { name: "Открыть игру Arena", exact: true })
+    .getByRole("button", { name: "Открыть категорию Arena", exact: true })
     .click();
   await expect(page.locator(".listing-card")).toHaveCount(2);
 }
@@ -444,7 +444,10 @@ test("публичный маркет показывает игры из API и 
   await page.goto("/");
   await expect(page.locator(".game-card")).toHaveCount(3);
   await expect(
-    page.getByRole("button", { name: "Открыть игру Craft World", exact: true }),
+    page.getByRole("button", {
+      name: "Открыть категорию Craft World",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("games-desktop.png"),
@@ -632,7 +635,7 @@ test("после входа объявления используют cookie и 
     .click();
   const dialog = page.getByRole("dialog");
   await dialog
-    .getByLabel("Название предмета", { exact: true })
+    .getByLabel("Название объявления", { exact: true })
     .fill("Crystal Helm");
   await dialog.getByLabel("Цена, ₽", { exact: true }).fill("125.50");
   await dialog
@@ -659,6 +662,31 @@ test("после входа объявления используют cookie и 
     expect(request.csrf).toBe("test-token");
     expect(request.authorization).toBeUndefined();
   }
+});
+
+test("отсутствие заказов по контракту бэкенда показывает пустой список; неизвестный маршрут остаётся ошибкой", async ({
+  page,
+}) => {
+  await server(page);
+  let message = "Заказы не найдены";
+  await page.route(/\/api\/orders$/, (route) =>
+    route.fulfill({ status: 404, json: { message } }),
+  );
+  await page.goto("/");
+  await login(page);
+  await page.getByRole("button", { name: /^Мои заказы/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Заказов нет", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Не удалось загрузить заказы", { exact: true }),
+  ).toHaveCount(0);
+  message = "Unknown route";
+  await page.reload();
+  await page.getByRole("button", { name: /^Мои заказы/ }).click();
+  await expect(
+    page.getByText("Не удалось загрузить заказы", { exact: true }),
+  ).toBeVisible();
 });
 
 test("покупка и продажа: серверный список, отзыв и чат с REST и WebSocket", async ({
@@ -824,7 +852,7 @@ test("USER не видит управление даже с именем admin �
   await login(page, "admin");
   await expect(management).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Создать игру", exact: true }),
+    page.getByRole("button", { name: "Создать категорию", exact: true }),
   ).toHaveCount(0);
   await page.evaluate(() =>
     localStorage.setItem("itembro.account", JSON.stringify({ role: "ADMIN" })),
@@ -848,18 +876,25 @@ test("ADMIN получает управление после профиля; п�
   await login(page, "admin");
   await expect(management).toBeVisible();
   await management.click();
-  await page.getByRole("button", { name: "Создать игру", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Создать категорию", exact: true })
+    .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Название игры", { exact: true }).fill("New Arena");
   await dialog
-    .getByRole("button", { name: "Создать игру", exact: true })
+    .getByLabel("Название категории", { exact: true })
+    .fill("New Arena");
+  await dialog
+    .getByRole("button", { name: "Создать категорию", exact: true })
     .click();
   await expect(dialog).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Архивировать игру New Arena", exact: true })
+    .getByRole("button", {
+      name: "Архивировать категорию New Arena",
+      exact: true,
+    })
     .click();
   await dialog
-    .getByRole("button", { name: "Архивировать игру", exact: true })
+    .getByRole("button", { name: "Архивировать категорию", exact: true })
     .click();
   await expect(
     page.locator(".managed-game").filter({ hasText: "New Arena" }),
@@ -1492,11 +1527,11 @@ test("изображения игры и объявления: права в UI,
   await login(page, "admin");
   await page.getByRole("button", { name: "Управление", exact: true }).click();
   await page
-    .getByRole("button", { name: "Изображение игры Arena", exact: true })
+    .getByRole("button", { name: "Изображение категории Arena", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
   const gameEditor = dialog.getByRole("region", {
-    name: "Изображение игры",
+    name: "Изображение категории",
     exact: true,
   });
   await gameEditor.locator("input[type=file]").setInputFiles(image);
@@ -1710,6 +1745,323 @@ test("чат: ранняя история, входящие события, по
   await chat.getByRole("button", { name: "Обновить", exact: true }).click();
   await expect(chat.locator(".chat-message")).toHaveCount(6);
   await expect(chat.getByRole("log")).toContainText("Заберу вечером");
+});
+
+test("системные сообщения: история, авторы, ранние записи и обычный текст действия", async ({
+  page,
+}, testInfo) => {
+  await server(page);
+  const system = (
+    id: number,
+    username: string,
+    eventType: string,
+    text: string,
+  ): ChatMessage => ({
+    id,
+    orderId: 73,
+    sender: { username, userRole: username === "admin" ? "ADMIN" : "USER" },
+    messageType: "SYSTEM",
+    eventType,
+    text,
+    sentAt: "2026-10-18T12:30:00Z",
+  });
+  const history: ChatMessage[] = [
+    system(10, "buyer", "ORDER_CREATED", "Заказ создан"),
+    system(45, "seller", "ORDER_CANCELLED", "Заказ отменён"),
+    system(105, "admin", "ORDER_REOPENED", "Заказ открыт повторно"),
+    {
+      id: 140,
+      orderId: 73,
+      sender: { username: "seller", userRole: "USER" },
+      text: "Заказ открыт повторно",
+      sentAt: "2026-10-18T12:31:00Z",
+    },
+  ];
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const before = params.get("beforeId");
+    const after = params.get("afterId");
+    const items = before
+      ? history.filter((item) => item.id < Number(before))
+      : after
+        ? history.filter((item) => item.id > Number(after))
+        : history.slice(-2);
+    return route.fulfill({
+      json: { items, hasMore: !before && !after },
+    });
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat.locator(".chat-system-message")).toHaveCount(1);
+  await expect(chat.locator(".chat-message p")).toHaveText(
+    "Заказ открыт повторно",
+  );
+  await expect(chat.locator(".chat-system-message .username-admin")).toHaveText(
+    "admin",
+  );
+  await expect(chat.locator(".chat-system-message time")).toHaveAttribute(
+    "datetime",
+    "2026-10-18T12:30:00Z",
+  );
+  await chat
+    .getByRole("button", { name: "Ранние сообщения", exact: true })
+    .click();
+  await expect(chat.locator(".chat-system-message p")).toHaveText([
+    "Заказ создан",
+    "Заказ отменён",
+    "Заказ открыт повторно",
+  ]);
+  await expect(chat.locator(".chat-system-message .username")).toHaveText([
+    "buyer",
+    "seller",
+    "admin",
+  ]);
+  await page
+    .getByRole("button", { name: "Закрыть уведомление", exact: true })
+    .click();
+  await page.screenshot({
+    path: testInfo.outputPath("system-messages-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: testInfo.outputPath("system-messages-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await chat.getByRole("button", { name: "Обновить", exact: true }).click();
+  await expect(chat.locator(".chat-system-message")).toHaveCount(1);
+  await chat
+    .getByRole("button", { name: "Ранние сообщения", exact: true })
+    .click();
+  await expect(chat.locator(".chat-system-message")).toHaveCount(3);
+});
+
+test("системные сообщения: WS обновляет статус заказа без переподключения и повторных записей", async ({
+  page,
+}) => {
+  const sockets: WebSocketRoute[] = [];
+  await server(page, undefined, (socket) => sockets.push(socket));
+  let status = "OPENED";
+  let orderReads = 0;
+  await page.route(/\/api\/orders\/73$/, (route) => {
+    orderReads++;
+    return route.fulfill({
+      json: {
+        id: 73,
+        adviceDTO: sword,
+        userBuyerDTO: { username: "buyer", userRole: "USER" },
+        price: 25,
+        rating: -1,
+        feedbackText: null,
+        sellerResponseText: null,
+        orderStatus: status,
+      },
+    });
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat.locator(".order-chat-header")).toContainText("Подключён");
+  const baseline = orderReads;
+  for (const [index, [nextStatus, label, eventType, text, username]] of [
+    [
+      "CLOSED",
+      "Закрыт",
+      "ORDER_CONFIRMED",
+      "Выполнение заказа подтверждено",
+      "buyer",
+    ],
+    ["OPENED", "Открыт", "ORDER_REOPENED", "Заказ открыт повторно", "admin"],
+    [
+      "REFUND",
+      "Отменён",
+      "ORDER_REFUNDED",
+      "Деньги возвращены покупателю",
+      "admin",
+    ],
+  ].entries()) {
+    status = nextStatus;
+    const message = {
+      id: 100 + index,
+      orderId: 73,
+      sender: { username, userRole: username === "admin" ? "ADMIN" : "USER" },
+      messageType: "SYSTEM",
+      eventType,
+      text,
+      sentAt: "2026-10-18T12:30:00Z",
+    };
+    sockets[0].send(JSON.stringify({ type: "message.created", message }));
+    await expect(page.locator(".order-status")).toHaveText(label);
+    await expect(chat.locator(".chat-system-message")).toHaveCount(index + 1);
+    await expect.poll(() => orderReads).toBe(baseline + index + 1);
+    sockets[0].send(JSON.stringify({ type: "message.created", message }));
+  }
+  // Следующее событие подтверждает обработку очереди с повторной доставкой.
+  sockets[0].send(
+    JSON.stringify({
+      type: "message.created",
+      message: {
+        id: 200,
+        orderId: 73,
+        sender: { username: "seller", userRole: "USER" },
+        text: "Возврат получен",
+        sentAt: "2026-10-18T12:31:00Z",
+      },
+    }),
+  );
+  await expect(chat.locator(".chat-message p")).toHaveText("Возврат получен");
+  expect(orderReads).toBe(baseline + 3);
+  expect(sockets).toHaveLength(1);
+  await expect(
+    page.getByRole("button", { name: "Подтвердить получение", exact: true }),
+  ).toHaveCount(0);
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toBeEnabled();
+});
+
+test("системные сообщения: REST восстанавливает событие и состояние заказа после разрыва WS", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+  await server(page, undefined, (socket) => socket.close());
+  const history: ChatMessage[] = [
+    {
+      id: 10,
+      orderId: 73,
+      sender: { username: "seller", userRole: "USER" },
+      text: "Начало разговора",
+      sentAt: "2026-10-18T12:00:00Z",
+    },
+  ];
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+    const after = new URL(route.request().url()).searchParams.get("afterId");
+    return route.fulfill({
+      json: {
+        items: after
+          ? history.filter((item) => item.id > Number(after))
+          : history,
+        hasMore: false,
+      },
+    });
+  });
+  let refunded = false;
+  await page.route(/\/api\/orders\/73$/, (route) => {
+    if (!refunded) return route.fallback();
+    return route.fulfill({
+      json: {
+        id: 73,
+        adviceDTO: sword,
+        userBuyerDTO: { username: "buyer", userRole: "USER" },
+        price: 25,
+        rating: -1,
+        feedbackText: null,
+        sellerResponseText: null,
+        orderStatus: "REFUND",
+      },
+    });
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat).toContainText("Автообновление");
+  refunded = true;
+  history.push({
+    id: 90,
+    orderId: 73,
+    sender: { username: "admin", userRole: "ADMIN" },
+    messageType: "SYSTEM",
+    eventType: "ORDER_REFUNDED",
+    text: "Деньги возвращены покупателю",
+    sentAt: "2026-10-18T12:01:00Z",
+  });
+  await page.clock.fastForward(3000);
+  await expect(chat.locator(".chat-system-message p")).toHaveText(
+    "Деньги возвращены покупателю",
+  );
+  await expect(page.locator(".order-status")).toHaveText("Отменён");
+  await page.clock.fastForward(6000);
+  await expect(chat.locator(".chat-system-message")).toHaveCount(1);
+  await chat.getByRole("button", { name: "Обновить", exact: true }).click();
+  await expect(chat.locator(".chat-system-message")).toHaveCount(1);
+  await expect(chat.locator(".chat-message")).toHaveCount(1);
+});
+
+test("системные сообщения: ошибки действия и некорректные события не создают записи", async ({
+  page,
+}) => {
+  const sockets: WebSocketRoute[] = [];
+  await server(page, undefined, (socket) => sockets.push(socket));
+  await page.route(/\/api\/orders\/73\/confirm$/, (route) =>
+    route.fulfill({ status: 503 }),
+  );
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat).toContainText("Подключён");
+  await page
+    .getByRole("button", { name: "Подтвердить получение", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("region", { name: "Заказ #73", exact: true })
+      .getByRole("alert"),
+  ).toContainText("Сервер не смог выполнить запрос");
+  await expect(page.locator(".order-status")).toHaveText("Открыт");
+  const invalid = {
+    id: 101,
+    orderId: 73,
+    sender: { username: "admin", userRole: "ADMIN" },
+    messageType: "SYSTEM",
+    text: "Заказ открыт повторно",
+    sentAt: "2026-10-18T12:30:00Z",
+  };
+  sockets[0].send(
+    JSON.stringify({ type: "message.created", message: invalid }),
+  );
+  await expect(chat.getByRole("alert")).toContainText(
+    "Не удалось прочитать новое сообщение",
+  );
+  for (const changes of [
+    { messageType: "OTHER" },
+    { eventType: "ORDER_REOPENED", orderId: 74 },
+  ])
+    sockets[0].send(
+      JSON.stringify({
+        type: "message.created",
+        message: { ...invalid, ...changes },
+      }),
+    );
+  sockets[0].send(
+    JSON.stringify({
+      type: "message.created",
+      message: {
+        ...invalid,
+        id: 102,
+        messageType: "USER",
+        text: "Заказ открыт повторно",
+      },
+    }),
+  );
+  await expect(chat.locator(".chat-message p")).toHaveText(
+    "Заказ открыт повторно",
+  );
+  await expect(chat.locator(".chat-system-message")).toHaveCount(0);
 });
 
 test("анимированное окно закрывается по Escape и возвращает фокус; reduced motion сохраняет управление", async ({

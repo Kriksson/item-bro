@@ -29,12 +29,14 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final AdviceRepository adviceRepository;
     private final UserRepository userRepository;
+    private final OrderMessageService orderMessageService;
 
-    public OrderService(OrderRepository orderRepository,  UserRepository userRepository,
-                        AdviceRepository adviceRepository) {
+    public OrderService(OrderRepository orderRepository, UserRepository userRepository,
+                        AdviceRepository adviceRepository, OrderMessageService orderMessageService) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.adviceRepository = adviceRepository;
+        this.orderMessageService = orderMessageService;
     }
 
     @Transactional
@@ -67,6 +69,8 @@ public class OrderService {
 
         Order orderFromDB = orderRepository.save(order);
 
+        orderMessageService.addSystemMessage(order, userBuyer, EventType.ORDER_CREATED);
+
         return new OrderDTO(orderFromDB, advice, userBuyer, userSeller, game);
     }
 
@@ -97,7 +101,7 @@ public class OrderService {
 
     @Transactional
     public void cancelOrder(Principal principal, Long orderId) {
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         Optional<User> u = userRepository.findByUsername(principal.getName());
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
@@ -121,11 +125,13 @@ public class OrderService {
 
         userBuyer.setBalance(newUserBuyerBalance);
         order.setStatus(OrderStatus.REFUND);
+
+        orderMessageService.addSystemMessage(order, userFromRequest, EventType.ORDER_CANCELED);
     }
 
     @Transactional
     public void confirmOrder(Principal principal, Long orderId) {
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         Optional<User> u = userRepository.findByUsername(principal.getName());
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
@@ -150,11 +156,13 @@ public class OrderService {
 
         userSeller.setBalance(newUserSellerBalance);
         order.setStatus(OrderStatus.CLOSED);
+
+        orderMessageService.addSystemMessage(order, userFromRequest, EventType.ORDER_CONFIRMED);
     }
 
     @Transactional
     public void addFeedback(Principal principal, Long orderId, Integer rating, String feedbackText) {
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         Optional<User> u = userRepository.findByUsername(principal.getName());
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
@@ -169,14 +177,20 @@ public class OrderService {
                 throw new NoPermissionsException("У вас нет прав!");
             }
         }
-
-        order.setRating(rating);
-        order.setFeedback(feedbackText);
+        if (order.getFeedback() == null) {
+            orderMessageService.addSystemMessage(order, userFromRequest, EventType.FEEDBACK_ADDED);
+            order.setRating(rating);
+            order.setFeedback(feedbackText);
+        } else {
+            orderMessageService.addSystemMessage(order, userFromRequest, EventType.FEEDBACK_UPDATED);
+            order.setRating(rating);
+            order.setFeedback(feedbackText);
+        }
     }
 
     @Transactional
     public void addSellerResponse(Principal principal, Long orderId, String sellerResponseText) {
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         Optional<User> u = userRepository.findByUsername(principal.getName());
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
@@ -194,7 +208,14 @@ public class OrderService {
 
         if (order.getRating() == -1) throw new FeedbackNotCreatedException("Отзыв не был создан");
 
-        order.setSellerResponse(sellerResponseText);
+        if (order.getSellerResponse() == null) {
+            order.setSellerResponse(sellerResponseText);
+            orderMessageService.addSystemMessage(order, userFromRequest, EventType.SELLER_RESPONSE_ADDED);
+        } else {
+            order.setSellerResponse(sellerResponseText);
+            orderMessageService.addSystemMessage(order, userFromRequest, EventType.SELLER_RESPONSE_UPDATED);
+        }
+
     }
 
     @Transactional(readOnly = true)
@@ -238,7 +259,7 @@ public class OrderService {
     public void adminOrderReopen(Long orderId, Principal principal) {
         if (orderId < 1) throw new IllegalArgumentException("Невалидный номер заказа");
         Optional<User> u = userRepository.findByUsername(principal.getName());
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
         Order order = o.get();
@@ -257,13 +278,14 @@ public class OrderService {
         BigDecimal price = order.getPrice();
         BigDecimal newUserSellerBalance = userSellerBalance.subtract(price);
         userSeller.setBalance(newUserSellerBalance);
+        orderMessageService.addSystemMessage(order, user, EventType.ORDER_REOPENED);
     }
 
     @Transactional
     public void adminOrderConfirm(Long orderId, Principal principal) {
         if (orderId < 1) throw new IllegalArgumentException("Невалидный номер заказа");
         Optional<User> u = userRepository.findByUsername(principal.getName());
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
         Order order = o.get();
@@ -281,13 +303,14 @@ public class OrderService {
         BigDecimal newUserSellerBalance = userSellerBalance.add(price);
         userSeller.setBalance(newUserSellerBalance);
         order.setStatus(OrderStatus.CLOSED);
+        orderMessageService.addSystemMessage(order, user, EventType.ORDER_CONFIRMED);
     }
 
     @Transactional
     public void adminOrderRefund(Long orderId, Principal principal) {
         if (orderId < 1) throw new IllegalArgumentException("Невалидный номер заказа");
         Optional<User> u = userRepository.findByUsername(principal.getName());
-        Optional<Order> o = orderRepository.findById(orderId);
+        Optional<Order> o = orderRepository.findLockedById(orderId);
         if (o.isEmpty()) throw new OrderNotFoundException("Заказ не найден");
         if (u.isEmpty()) throw new UserNotFoundException("Пользователь не найден");
         Order order = o.get();
@@ -306,5 +329,6 @@ public class OrderService {
         BigDecimal newUserBuyerBalance = userBuyerBalance.add(price);
         userBuyer.setBalance(newUserBuyerBalance);
         order.setStatus(OrderStatus.REFUND);
+        orderMessageService.addSystemMessage(order, user, EventType.ORDER_REFUNDED);
     }
 }
