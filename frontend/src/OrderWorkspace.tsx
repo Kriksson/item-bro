@@ -1,6 +1,13 @@
-import { useEffect } from "react";
-import { ArrowLeft, ArrowRight, CheckCheck, Star } from "lucide-react";
-import type { Account, Marketplace, Order } from "./types";
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCheck,
+  ShieldCheck,
+  Star,
+} from "lucide-react";
+import type { Account, Marketplace, Order, OrderAction } from "./types";
+import { Modal } from "./components";
 import { money } from "./storage";
 import { OrderKindBadge, OrderStatusBadge, orderKind } from "./OrdersPage";
 import Username from "./Username";
@@ -25,12 +32,16 @@ export default function OrderWorkspace({
   busy: boolean;
   error: string;
   onBack: () => void;
-  onAction: (action: "confirm" | "cancel") => Promise<void>;
+  onAction: (action: OrderAction) => Promise<void>;
   onFeedback: (rating: number, text: string) => Promise<void>;
   onResponse: (text: string) => Promise<void>;
   focusChat?: boolean;
   backLabel?: string;
 }) {
+  const [adminAction, setAdminAction] = useState<
+    "reopen" | "admin-confirm" | "refund" | null
+  >(null);
+  useEffect(() => setAdminAction(null), [order.id, order.orderStatus]);
   useEffect(() => {
     if (focusChat)
       document.getElementById("order-chat")?.scrollIntoView({ block: "start" });
@@ -39,7 +50,7 @@ export default function OrderWorkspace({
   const isAdmin = account.role === "ADMIN";
   const canReview = kind === "purchase" || isAdmin;
   const canRespond = kind === "sale" || isAdmin;
-  const isOpen = !order.orderStatus || order.orderStatus === "OPENED";
+  const isOpen = order.orderStatus === "OPENED";
   return (
     <section className="order-workspace" aria-label={`Заказ #${order.id}`}>
       <button className="text-button back-link" onClick={onBack}>
@@ -86,7 +97,7 @@ export default function OrderWorkspace({
                 </strong>
               </div>
             </div>
-            {isOpen && (
+            {isOpen && !isAdmin && (
               <div className="order-actions">
                 {canReview && (
                   <>
@@ -112,6 +123,40 @@ export default function OrderWorkspace({
                 )}
               </div>
             )}
+            {isAdmin && (isOpen || order.orderStatus === "CLOSED") && (
+              <section
+                className="advice-admin-functions"
+                aria-label="Админ-функции заказа"
+              >
+                <h3>
+                  <ShieldCheck size={17} />
+                  Админ-функции
+                </h3>
+                {order.orderStatus === "CLOSED" ? (
+                  <button
+                    className="button button-secondary button-full"
+                    onClick={() => setAdminAction("reopen")}
+                  >
+                    Открыть заказ
+                  </button>
+                ) : (
+                  <div className="order-actions">
+                    <button
+                      className="button button-full"
+                      onClick={() => setAdminAction("admin-confirm")}
+                    >
+                      Подтвердить заказ
+                    </button>
+                    <button
+                      className="button button-secondary button-full"
+                      onClick={() => setAdminAction("refund")}
+                    >
+                      Вернуть деньги
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
             {order.orderStatus === "CLOSED" && (
               <p className="order-terminal-note">
                 <CheckCheck size={17} />
@@ -123,7 +168,7 @@ export default function OrderWorkspace({
                 Заказ отменён, средства возвращены покупателю.
               </p>
             )}
-            {error && (
+            {error && !adminAction && (
               <p className="form-error" role="alert">
                 {error}
               </p>
@@ -249,6 +294,39 @@ export default function OrderWorkspace({
           client={client}
         />
       </div>
+      {adminAction && (
+        <Modal
+          title={
+            adminAction === "reopen"
+              ? "Открыть заказ?"
+              : adminAction === "refund"
+                ? "Вернуть деньги?"
+                : "Подтвердить заказ?"
+          }
+          canClose={!busy}
+          onClose={() => setAdminAction(null)}
+        >
+          <p className="confirmation-name">
+            Заказ #{order.id} · {money(order.price)} ₽
+          </p>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            className="button button-full"
+            disabled={busy}
+            onClick={() => void onAction(adminAction)}
+          >
+            {adminAction === "reopen"
+              ? "Открыть заказ"
+              : adminAction === "refund"
+                ? "Вернуть деньги"
+                : "Подтвердить заказ"}
+          </button>
+        </Modal>
+      )}
     </section>
   );
 }

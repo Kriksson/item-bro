@@ -70,6 +70,8 @@ export type ChatMessage = {
   sentAt: string;
 };
 export type MessagePage = { items: ChatMessage[]; hasMore: boolean };
+export type OrderAction =
+  "confirm" | "cancel" | "reopen" | "admin-confirm" | "refund";
 export type Page =
   "market" | "orders" | "selling" | "admin" | "order" | "profile";
 export interface Marketplace {
@@ -84,7 +86,7 @@ export interface Marketplace {
   archiveAdvice(id: number): Promise<void>;
   createOrder(adviceId: number): Promise<Order>;
   order(id: number): Promise<Order>;
-  action(id: number, action: "confirm" | "cancel"): Promise<void>;
+  action(id: number, action: OrderAction): Promise<void>;
   feedback(id: number, rating: number, feedbackText: string): Promise<void>;
   response(id: number, responseText: string): Promise<void>;
   createGame(name: string): Promise<Game>;

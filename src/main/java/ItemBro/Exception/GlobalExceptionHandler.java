@@ -120,4 +120,9 @@ public class GlobalExceptionHandler {
         ApiError apiError = new ApiError(ex.getMessage());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    @ExceptionHandler(OrderNotClosedException.class)
+    public ResponseEntity<ApiError> handleOrderNotClosedException(OrderNotClosedException ex) {
+        ApiError apiError = new ApiError(ex.getMessage());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
 }

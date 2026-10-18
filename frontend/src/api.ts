@@ -5,6 +5,7 @@ import type {
   Game,
   Marketplace,
   Order,
+  OrderAction,
   UserProfile,
   PublicProfile,
   Review,
@@ -263,7 +264,11 @@ export class ApiMarketplace implements Marketplace {
   order(id: number) {
     return this.request<Order>(`/api/orders/${id}`);
   }
-  action(id: number, action: "confirm" | "cancel") {
+  action(id: number, action: OrderAction) {
+    if (action === "reopen" || action === "refund")
+      return this.request<void>(`/api/admin/orders/${id}/${action}`, "PATCH");
+    if (action === "admin-confirm")
+      return this.request<void>(`/api/admin/orders/${id}/confirm`, "PATCH");
     return this.request<void>(`/api/orders/${id}/${action}`, "PATCH");
   }
   feedback(id: number, rating: number, feedbackText: string) {

@@ -67,6 +67,7 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.GET, "/api/orders").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/user/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/orders/{id}/messages").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/orders/{id}/chat/ws").authenticated()
 
                         .requestMatchers(HttpMethod.POST, "/api/user").anonymous()
                         .requestMatchers(HttpMethod.POST, "/api/advices").authenticated()
@@ -85,6 +86,9 @@ public class SecuritySettings {
                         .requestMatchers(HttpMethod.PATCH, "/api/orders/{id}/response").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/games/{id}/delete").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/user/me").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/orders/{id}/reopen").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/orders/{id}/refund").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/admin/orders/{id}/confirm").hasRole("ADMIN")
 
                         .requestMatchers(HttpMethod.PUT, "/api/user/me/avatar").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/advices/{id}/image").authenticated()

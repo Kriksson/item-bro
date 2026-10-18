@@ -147,7 +147,12 @@ export default function OrderChat({
         window.location.href,
       );
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-      socket = new WebSocket(url);
+      try {
+        socket = new WebSocket(url);
+      } catch {
+        if (!historyError) setStatus("Автообновление");
+        return;
+      }
       socket.onopen = () => {
         if (stopped) return;
         failures = 0;

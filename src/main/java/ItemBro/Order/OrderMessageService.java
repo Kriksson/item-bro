@@ -1,11 +1,13 @@
 package ItemBro.Order;
 
 import ItemBro.Exception.*;
+import ItemBro.Order.Chat.OrderMessageCreatedEvent;
 import ItemBro.Order.DTO.MessageBody;
 import ItemBro.Order.DTO.MessageDTO;
 import ItemBro.User.User;
 import ItemBro.User.UserRepository;
 import ItemBro.User.UserRole;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -18,14 +20,17 @@ import java.util.Optional;
 
 @Service
 public class OrderMessageService {
+
+    private final ApplicationEventPublisher publisher;
     private final OrderMessageRepository orderMessageRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     public OrderMessageService(OrderRepository orderRepository,  UserRepository userRepository,
-                               OrderMessageRepository orderMessageRepository) {
+                               OrderMessageRepository orderMessageRepository,  ApplicationEventPublisher publisher) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.orderMessageRepository = orderMessageRepository;
+        this.publisher = publisher;
     }
 
     @Transactional
@@ -63,13 +68,15 @@ public class OrderMessageService {
             }
         }
 
-        if (orderStatus != OrderStatus.OPENED) throw new OrderNotOpenedException("Заказ закрыт");
-
-
         OrderMessage newMessage = new OrderMessage(order, user, text, messageBody.clientMessageId());
         OrderMessage messageFromDB = orderMessageRepository.save(newMessage);
+        MessageDTO messageDTO = new MessageDTO(messageFromDB, messageFromDB.getOrder());
 
-        return new AddMessageResult(new MessageDTO(messageFromDB, messageFromDB.getOrder()), true);
+        publisher.publishEvent(new OrderMessageCreatedEvent(messageDTO));
+
+
+
+        return new AddMessageResult(messageDTO, true);
     }
 
     @Transactional(readOnly = true)

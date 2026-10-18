@@ -79,6 +79,16 @@ async function server(
     sellerResponseText: null as string | null,
     orderStatus: "OPENED" as "OPENED" | "CLOSED" | "REFUND",
   };
+  const adminOrder = () => ({
+    ...order,
+    id: 74,
+    adviceDTO: {
+      ...order.adviceDTO,
+      name: "Ancient Ring",
+      userSeller: { username: "mira", userRole: "USER" },
+    },
+    userBuyerDTO: { username: "alex", userRole: "USER" },
+  });
   const sessions = new Map<string, string>();
   let nextSession = 1;
   await page.route(/\/(api\/|csrf(?:\?|$))/, async (route) => {
@@ -311,6 +321,24 @@ async function server(
         order = { ...order, orderStatus: "REFUND" };
         return empty();
       }
+      const adminAction =
+        /^\/api\/admin\/orders\/74\/(reopen|confirm|refund)$/.exec(path);
+      if (adminAction && method === "PATCH") {
+        if (roles[username] !== "ADMIN")
+          return json(403, { message: "No permissions" });
+        const action = adminAction[1];
+        const expected = action === "reopen" ? "CLOSED" : "OPENED";
+        if (order.orderStatus !== expected)
+          return json(409, { message: "order not open" });
+        const next =
+          action === "reopen"
+            ? "OPENED"
+            : action === "confirm"
+              ? "CLOSED"
+              : "REFUND";
+        order = { ...order, orderStatus: next };
+        return empty();
+      }
       if (path === "/api/games") {
         if (!username || roles[username] !== "ADMIN")
           return json(403, { message: "No have permissions" });
@@ -327,19 +355,7 @@ async function server(
     if (path === "/api/admin/orders") {
       if (roles[username] !== "ADMIN")
         return json(403, { message: "No permissions" });
-      return json(200, [
-        {
-          ...order,
-          id: 74,
-          adviceDTO: {
-            ...order.adviceDTO,
-            name: "Ancient Ring",
-            userSeller: { username: "mira", userRole: "USER" },
-          },
-          userBuyerDTO: { username: "alex", userRole: "USER" },
-        },
-        ...(orderCreated ? [order] : []),
-      ]);
+      return json(200, [adminOrder(), ...(orderCreated ? [order] : [])]);
     }
     if (path === "/api/orders")
       return json(
@@ -353,6 +369,7 @@ async function server(
           : [],
       );
     if (path === "/api/orders/73") return json(200, order);
+    if (path === "/api/orders/74") return json(200, adminOrder());
     return json(404, { message: "Unknown route" });
   });
   return mutations;
@@ -1678,7 +1695,7 @@ test("чат: ранняя история, входящие события, по
   expect(attempts[1].clientMessageId).toBe(attempts[0].clientMessageId);
   await expect(draft).toHaveValue("");
   sockets[0].close();
-  await expect(chat).toContainText("Переподключение");
+  await expect(chat).toContainText("Автообновление");
   history.push(message(54, "Сообщение во время разрыва"));
   // Успешный POST с большим ID во время разрыва не должен скрыть пропущенное.
   await draft.fill("Отправлено без сокета");
@@ -1764,4 +1781,406 @@ test("отсутствующий API чата не оставляет стату
   await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
   await expect(chat.getByRole("status")).toHaveCount(0);
   expect(sockets).toBe(0);
+});
+
+async function logout(page: Page) {
+  await page.locator(".profile").click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
+}
+
+async function openAdminOrder(page: Page) {
+  await page.goto("/");
+  await login(page, "admin");
+  await page.getByRole("button", { name: "Управление", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Заказы и чаты площадки", exact: true })
+    .getByRole("button", { name: "Открыть заказ", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Заказ #74", exact: true }),
+  ).toBeVisible();
+}
+
+async function adminAction(page: Page, name: string) {
+  await page
+    .getByRole("region", { name: "Админ-функции заказа", exact: true })
+    .getByRole("button", { name, exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name, exact: true })
+    .click();
+}
+
+test("чат без WebSocket: REST догружает все страницы, сохраняет пропуски ID и не дублирует ответ POST", async ({
+  page,
+}, testInfo) => {
+  await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+  await server(page, undefined, (ws) => ws.close());
+  const message = (
+    id: number,
+    text: string,
+    sender = "seller",
+  ): ChatMessage => ({
+    id,
+    orderId: 73,
+    text,
+    sender: { username: sender, userRole: "USER" },
+    sentAt: "2026-10-18T12:00:00Z",
+  });
+  const history = [message(10, "Начало разговора")];
+  const cursors: number[] = [];
+  let reads = 0;
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      const saved = message(400, request.postDataJSON().text, "buyer");
+      history.push(saved);
+      return route.fulfill({ status: 201, json: saved });
+    }
+    reads++;
+    const after = new URL(request.url()).searchParams.get("afterId");
+    if (after === null)
+      return route.fulfill({ json: { items: history, hasMore: false } });
+    cursors.push(Number(after));
+    const items = history.filter((item) => item.id > Number(after));
+    return route.fulfill({
+      json: { items: items.slice(0, 2), hasMore: items.length > 2 },
+    });
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await expect(chat).toContainText("Начало разговора");
+  await expect(chat.locator(".order-chat-header")).toContainText(
+    "Автообновление",
+  );
+  await expect(chat).not.toContainText("Переподключение");
+  history.push(
+    message(100, "Сообщение продавца"),
+    message(250, "Ещё одно сообщение"),
+  );
+  await chat.getByLabel("Сообщение", { exact: true }).fill("Ответ покупателя");
+  await chat
+    .getByRole("button", { name: "Отправить сообщение", exact: true })
+    .click();
+  await expect(chat.getByRole("log")).toContainText("Ответ покупателя");
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toHaveValue("");
+  await page.clock.fastForward(3000);
+  await expect(chat.locator(".chat-message p")).toHaveText([
+    "Начало разговора",
+    "Сообщение продавца",
+    "Ещё одно сообщение",
+    "Ответ покупателя",
+  ]);
+  expect(cursors).toContain(10);
+  expect(cursors).toContain(250);
+  await expect(chat.getByRole("alert")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Закрыть уведомление", exact: true })
+    .click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: testInfo.outputPath("chat-rest-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.clock.runFor(400);
+  await expect(page.locator(".sidebar")).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: testInfo.outputPath("chat-rest-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
+  await page.getByRole("button", { name: /Мои заказы/ }).click();
+  const readsAfterLeaving = reads;
+  await page.clock.fastForward(30_000);
+  expect(reads).toBe(readsAfterLeaving);
+});
+
+test("чат: временная ошибка REST сохраняет переписку и автоматически восстанавливается", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+  await server(page, undefined, (ws) => ws.close());
+  let unavailable = false;
+  await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+    if (unavailable) return route.fulfill({ status: 503 });
+    return route.fallback();
+  });
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+  await chat
+    .getByLabel("Сообщение", { exact: true })
+    .fill("Сохранённое сообщение");
+  await chat
+    .getByRole("button", { name: "Отправить сообщение", exact: true })
+    .click();
+  await expect(chat.getByRole("log")).toContainText("Сохранённое сообщение");
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toHaveValue("");
+  unavailable = true;
+  await page.clock.fastForward(3000);
+  await expect(chat.getByRole("alert")).toContainText(
+    "Сервер не смог выполнить запрос",
+  );
+  await expect(chat.getByRole("log")).toContainText("Сохранённое сообщение");
+  unavailable = false;
+  await page.clock.fastForward(3000);
+  await expect(chat.getByRole("alert")).toHaveCount(0);
+  await expect(chat.getByLabel("Сообщение", { exact: true })).toBeEnabled();
+  await expect(chat.locator(".chat-message")).toHaveCount(1);
+});
+
+for (const [status, label] of [
+  [401, "Требуется вход"],
+  [403, "Нет доступа"],
+  [404, "Недоступен"],
+] as const) {
+  test(`чат: потеря доступа (${status}) останавливает REST и переподключения`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: new Date("2026-10-18T12:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-10-18T12:00:01Z"));
+    let connections = 0;
+    await server(page, undefined, (ws) => {
+      connections++;
+      ws.close();
+    });
+    let denied = false;
+    let reads = 0;
+    await page.route(/\/api\/orders\/73\/messages(?:\?|$)/, (route) => {
+      reads++;
+      if (denied)
+        return route.fulfill({ status, json: { message: "Нет доступа" } });
+      return route.fallback();
+    });
+    await page.goto("/");
+    await login(page);
+    await selectGame(page);
+    await purchase(page);
+    const chat = page.getByRole("region", { name: "Чат заказа", exact: true });
+    await expect(chat.getByLabel("Сообщение", { exact: true })).toBeEnabled();
+    denied = true;
+    await page.clock.fastForward(3000);
+    await expect(chat.locator(".order-chat-header")).toContainText(label);
+    await expect(chat.getByLabel("Сообщение", { exact: true })).toBeDisabled();
+    const stopped = { connections, reads };
+    await page.clock.fastForward(30_000);
+    expect({ connections, reads }).toEqual(stopped);
+  });
+}
+
+for (const status of ["CLOSED", "REFUND"] as const) {
+  test(`чат после ${status}: покупатель и продавец могут продолжить переписку`, async ({
+    page,
+  }) => {
+    await server(page);
+    await page.goto("/");
+    await login(page);
+    await selectGame(page);
+    await purchase(page);
+    if (status === "REFUND") {
+      await logout(page);
+      await login(page, "seller");
+      await page.getByRole("button", { name: /Мои заказы/ }).click();
+      await page.locator(".order-row").click();
+    }
+    await page
+      .getByRole("button", {
+        name: status === "CLOSED" ? "Подтвердить получение" : "Отменить заказ",
+        exact: true,
+      })
+      .click();
+    const send = async (text: string) => {
+      const chat = page.getByRole("region", {
+        name: "Чат заказа",
+        exact: true,
+      });
+      await chat.getByLabel("Сообщение", { exact: true }).fill(text);
+      await chat
+        .getByRole("button", { name: "Отправить сообщение", exact: true })
+        .click();
+      await expect(chat.getByRole("log")).toContainText(text);
+    };
+    await send("Можно уточнить детали после сделки?");
+    await logout(page);
+    await login(page, status === "CLOSED" ? "seller" : "buyer");
+    await page.getByRole("button", { name: /Мои заказы/ }).click();
+    await page.locator(".order-row").click();
+    await expect(page.getByRole("log")).toContainText(
+      "Можно уточнить детали после сделки?",
+    );
+    await send("Да, конечно");
+    await expect(page.locator(".order-status")).toHaveText(
+      status === "CLOSED" ? "Закрыт" : "Отменён",
+    );
+    await expect(
+      page.getByRole("region", { name: "Админ-функции заказа", exact: true }),
+    ).toHaveCount(0);
+  });
+}
+
+test("администратор: отдельные действия, повторное открытие, подтверждение и возврат", async ({
+  page,
+}, testInfo) => {
+  const mutations = await server(page);
+  await openAdminOrder(page);
+  const workspace = page.getByRole("region", {
+    name: "Заказ #74",
+    exact: true,
+  });
+  const controls = workspace.getByRole("region", {
+    name: "Админ-функции заказа",
+    exact: true,
+  });
+  await expect(
+    workspace.getByRole("button", {
+      name: "Подтвердить получение",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    workspace.getByRole("button", { name: "Отменить заказ", exact: true }),
+  ).toHaveCount(0);
+  await adminAction(page, "Подтвердить заказ");
+  await expect(workspace.locator(".order-status")).toHaveText("Закрыт");
+  await expect(
+    controls.getByRole("button", { name: "Открыть заказ", exact: true }),
+  ).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "Вернуть деньги", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Закрыть уведомление", exact: true })
+    .click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: testInfo.outputPath("admin-closed-order-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await controls
+    .getByRole("button", { name: "Открыть заказ", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Закрыть окно", exact: true })
+    .click();
+  expect(
+    mutations.filter((item) => item.path.endsWith("/reopen")),
+  ).toHaveLength(0);
+  await adminAction(page, "Открыть заказ");
+  await expect(workspace.locator(".order-status")).toHaveText("Открыт");
+  await expect(
+    controls.getByRole("button", { name: "Подтвердить заказ", exact: true }),
+  ).toBeVisible();
+  await expect(
+    controls.getByRole("button", { name: "Вернуть деньги", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".sidebar")).toBeHidden();
+  await page
+    .getByRole("button", { name: "Закрыть уведомление", exact: true })
+    .click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: testInfo.outputPath("admin-reopened-order-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await adminAction(page, "Вернуть деньги");
+  await expect(workspace.locator(".order-status")).toHaveText("Отменён");
+  await expect(controls).toHaveCount(0);
+  const actions = mutations.filter((item) =>
+    item.path.startsWith("/api/admin/orders/"),
+  );
+  expect(actions.map((item) => item.path)).toEqual([
+    "/api/admin/orders/74/confirm",
+    "/api/admin/orders/74/reopen",
+    "/api/admin/orders/74/refund",
+  ]);
+  for (const request of actions) {
+    expect(request.method).toBe("PATCH");
+    expect(request.csrf).toBe("test-token");
+    expect(request.authorization).toBeUndefined();
+    expect(request.body).toBeNull();
+  }
+  expect(
+    mutations.filter((item) =>
+      /^\/api\/orders\/74\/(confirm|cancel)$/.test(item.path),
+    ),
+  ).toHaveLength(0);
+});
+
+for (const status of [400, 403, 404, 409, 500]) {
+  test(`админ-действие: ошибка ${status} не меняет статус и оставляет возможность повтора`, async ({
+    page,
+  }) => {
+    await server(page);
+    let rejected = true;
+    await page.route("**/api/admin/orders/74/confirm", (route) => {
+      if (rejected)
+        return route.fulfill({
+          status,
+          json: { message: "Операция отклонена" },
+        });
+      return route.fallback();
+    });
+    await openAdminOrder(page);
+    await adminAction(page, "Подтвердить заказ");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(page.locator(".order-status")).toHaveText("Открыт");
+    await expect(
+      dialog.getByRole("button", { name: "Подтвердить заказ", exact: true }),
+    ).toBeEnabled();
+    rejected = false;
+    await dialog
+      .getByRole("button", { name: "Подтвердить заказ", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".order-status")).toHaveText("Закрыт");
+  });
+}
+
+test("успешное админ-действие не объявляется неудачным при ошибке последующего GET", async ({
+  page,
+}) => {
+  await server(page);
+  let reads = 0;
+  await page.route("**/api/orders/74", (route) => {
+    reads++;
+    if (reads > 1) return route.fulfill({ status: 503 });
+    return route.fallback();
+  });
+  await openAdminOrder(page);
+  await adminAction(page, "Подтвердить заказ");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".order-status")).toHaveText("Закрыт");
+  await expect(page.getByRole("alert")).toContainText(
+    "Действие выполнено. Не удалось обновить данные заказа.",
+  );
+  await expect(page.locator(".toast")).toContainText("Заказ подтверждён");
 });

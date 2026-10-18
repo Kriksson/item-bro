@@ -92,4 +92,22 @@ public class OrderController {
             @RequestParam(value = "afterId", required = false) Long afterId) {
         return ResponseEntity.ok(orderMessageService.getMessages(principal, id, limit, beforeId, afterId));
     }
+
+    @PatchMapping("/api/admin/orders/{id}/reopen")
+    public ResponseEntity<Void> reopenOrder(@PathVariable("id") Long id, Principal principal) {
+        orderService.adminOrderReopen(id, principal);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/admin/orders/{id}/confirm")
+    public ResponseEntity<Void> confirmOrder(@PathVariable("id") Long id, Principal principal) {
+        orderService.adminOrderConfirm(id, principal);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/admin/orders/{id}/refund")
+    public ResponseEntity<Void> refundOrder(@PathVariable("id") Long id, Principal principal) {
+        orderService.adminOrderRefund(id, principal);
+        return ResponseEntity.noContent().build();
+    }
 }

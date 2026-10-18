@@ -24,7 +24,15 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import type { Account, Advice, AdvicePage, Game, Order, Page } from "./types";
+import type {
+  Account,
+  Advice,
+  AdvicePage,
+  Game,
+  Order,
+  OrderAction,
+  Page,
+} from "./types";
 import { ApiMarketplace } from "./api";
 import MarketPage from "./MarketPage";
 import OrdersPage, { orderKind } from "./OrdersPage";
@@ -334,19 +342,36 @@ export default function App() {
       setRefresh((value) => value + 1);
       notify(`Заказ #${order.id} создан`);
     });
-  const orderAction = (order: Order, action: "confirm" | "cancel") =>
+  const orderAction = (order: Order, action: OrderAction) =>
     work(async () => {
       await client.action(order.id, action);
-      const updated = await client.order(order.id);
+      const statuses: Record<OrderAction, Order["orderStatus"]> = {
+        confirm: "CLOSED",
+        cancel: "REFUND",
+        reopen: "OPENED",
+        "admin-confirm": "CLOSED",
+        refund: "REFUND",
+      };
+      const updated = { ...order, orderStatus: statuses[action] };
       rememberOrder(updated);
       updateBalance();
       setActiveOrder(updated);
       setRefresh((value) => value + 1);
-      notify(
-        action === "confirm"
-          ? "Получение подтверждено. Деньги переданы продавцу."
-          : "Заказ отменён. Деньги возвращены покупателю.",
-      );
+      const notices: Record<OrderAction, string> = {
+        confirm: "Получение подтверждено. Деньги переданы продавцу.",
+        cancel: "Заказ отменён. Деньги возвращены покупателю.",
+        reopen: "Заказ открыт снова.",
+        "admin-confirm": "Заказ подтверждён. Деньги переданы продавцу.",
+        refund: "Деньги возвращены покупателю.",
+      };
+      notify(notices[action]);
+      try {
+        const fresh = await client.order(order.id);
+        rememberOrder(fresh);
+        setActiveOrder(fresh);
+      } catch {
+        setFormError("Действие выполнено. Не удалось обновить данные заказа.");
+      }
     });
 
   const openOrder = (order: Order, fromAdmin = false, chat = false) =>
