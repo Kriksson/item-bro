@@ -154,4 +154,37 @@ public class GameService {
             logger.warn("Не удалось удалить файл {}", path, e);
         }
     }
+
+    @Transactional(rollbackFor = IOException.class)
+    public GameDTO removeImage(Long gameId) throws IOException {
+        Optional<Game> g = gameRepository.findById(gameId);
+        if (g.isEmpty()) throw new GameNotFountException("game not found");
+        Game game = g.get();
+        GameStatus gameStatus = game.getStatus();
+
+        if (gameStatus != GameStatus.OPENED) throw new GameNotOpenedException("game not opened");
+
+        String imageUrl = game.getImageUrl();
+        if (imageUrl == null) return new GameDTO(game);
+
+        Path uploadDirectory = Path.of("/app/uploads");
+        Files.createDirectories(uploadDirectory);
+
+        String fileId = imageUrl.substring("/api/media/".length());
+        UUID uuid = UUID.fromString(fileId);
+        Path dest =  uploadDirectory.resolve(uuid.toString());
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    deleteFile(dest);
+                } else {
+                    logger.warn("Неизвестная ситуация: {}", dest);
+                }
+            }
+        });
+        game.setImageUrl(null);
+        return new GameDTO(game);
+    }
 }

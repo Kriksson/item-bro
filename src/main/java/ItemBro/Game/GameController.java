@@ -43,4 +43,9 @@ public class GameController {
             throws IOException {
         return ResponseEntity.ok(gameService.uploadImage(id, file));
     }
+
+    @DeleteMapping("/api/games/{id}/image")
+    public ResponseEntity<GameDTO> deleteImage(@PathVariable("id") Long id) throws IOException {
+        return ResponseEntity.ok(gameService.removeImage(id));
+    }
 }
