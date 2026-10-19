@@ -8,9 +8,18 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
       - name: Print start check
-        run: echo "started"
+        run: echo "Check started"
+      - name: Set up java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Get java version
         run: java --version
       - name: Get docker info
         run: docker info
+      - name: Start verify
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify
