@@ -75,7 +75,7 @@ public class AdviceService {
                 throw new UserLimitAdviceException("Limit advice");
             }
         } else {
-            throw new UserNotFoundException("User not found");
+            throw new UserNotFoundException("Пользователь не найден");
         }
     }
 
