@@ -18,16 +18,17 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Test report
-        uses: actions/upload-artifact@v7
-        with:
-          name: 'backend-test-report'
-          path: target/surefire-reports/
-          retention-days: 7
-        if: always()
       - name: Get java version
         run: java --version
       - name: Get docker info
         run: docker info
       - name: Start verify
         run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Test report
+        uses: actions/upload-artifact@v7
+        with:
+          name: 'backend-test-report'
+          path: target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: error
+        if: always()
