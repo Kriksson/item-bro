@@ -1,0 +1,16 @@
+name: Backend CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Print start check
+        run: echo "started"
+      - name: Get java version
+        run: java --version
+      - name: Get docker info
+        run: docker info
