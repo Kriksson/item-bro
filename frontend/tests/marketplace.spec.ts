@@ -771,7 +771,7 @@ test("покупка и продажа: серверный список, отз�
   await expect(page.locator(".order-row")).toContainText("Покупка");
   await page.locator(".profile").click();
   await page
-    .getByRole("dialog")
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
     .getByRole("button", { name: "Выйти", exact: true })
     .click();
   await login(page, "seller");
@@ -901,7 +901,10 @@ test("ADMIN получает управление после профиля; п�
   ).toHaveCount(0);
   expect(mutations.at(-1)?.path).toBe("/api/games/8/delete");
   await page.locator(".profile").click();
-  await dialog.getByRole("button", { name: "Выйти", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
   await expect(management).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Управление." })).toHaveCount(
     0,
@@ -1049,7 +1052,7 @@ test("публичный профиль: активные объявления, 
     animations: "disabled",
   });
   await profile.getByRole("button", { name: "buyer", exact: true }).click();
-  await expect(page).toHaveURL(/#\/users\/buyer$/);
+  await expect(page).toHaveURL(/\/users\/buyer$/);
   await expect(
     page.getByRole("region", { name: "Профиль buyer", exact: true }),
   ).toContainText("Нет активных объявлений");
@@ -1058,7 +1061,7 @@ test("публичный профиль: активные объявления, 
     page.getByRole("heading", { name: "buyer", exact: true }),
   ).toBeVisible();
   await login(page);
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/users\/buyer$/);
   await expect(page.locator(".profile")).toContainText("buyer");
 });
 
@@ -1142,7 +1145,7 @@ test("ник открывает профиль, недоступный проф�
     .first()
     .getByRole("button", { name: "seller", exact: true })
     .click();
-  await expect(page).toHaveURL(/#\/users\/seller$/);
+  await expect(page).toHaveURL(/\/users\/seller$/);
   await expect(
     page.getByRole("heading", { name: "seller", exact: true }),
   ).toBeVisible();
@@ -1345,7 +1348,7 @@ test("F5 восстанавливает ADMIN по HttpOnly cookie, выход �
   ).not.toContain(password);
   await page.locator(".profile").click();
   await page
-    .getByRole("dialog")
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
     .getByRole("button", { name: "Выйти", exact: true })
     .click();
   await expect(management).toHaveCount(0);
@@ -1417,23 +1420,29 @@ test("профиль и аватар сохраняются на сервере,
   await page.goto("/");
   await login(page);
   await page.locator(".profile").click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Возраст", { exact: true }).fill("25");
-  await dialog.getByLabel("Город", { exact: true }).fill("  Казань  ");
-  await dialog
+  await page
+    .getByRole("link", { name: "Настройки профиля", exact: true })
+    .click();
+  const settings = page.getByRole("region", {
+    name: "Настройки профиля",
+    exact: true,
+  });
+  await settings.getByLabel("Возраст", { exact: true }).fill("25");
+  await settings.getByLabel("Город", { exact: true }).fill("  Казань  ");
+  await settings
     .getByLabel("О себе", { exact: true })
     .fill("  Играю по вечерам.  ");
-  await dialog
+  await settings
     .getByRole("button", { name: "Сохранить профиль", exact: true })
     .click();
-  await expect(dialog.getByRole("status")).toHaveText("Профиль сохранён.");
+  await expect(settings.getByRole("status")).toHaveText("Профиль сохранён.");
   expect(mutations.at(-1)).toMatchObject({
     method: "PATCH",
     path: "/api/user/me",
     csrf: "test-token",
     body: { age: 25, city: "Казань", about: "Играю по вечерам." },
   });
-  const avatar = dialog.getByRole("region", { name: "Аватар", exact: true });
+  const avatar = settings.getByRole("region", { name: "Аватар", exact: true });
   await avatar.locator("input[type=file]").setInputFiles(image);
   await expect(avatar.getByRole("img")).toHaveAttribute("src", /^blob:/);
   await avatar
@@ -1467,15 +1476,17 @@ test("профиль и аватар сохраняются на сервере,
     "src",
     "/api/media/avatar",
   );
-  await page.locator(".profile").click();
-  await expect(dialog.getByLabel("Возраст", { exact: true })).toHaveValue("25");
-  await expect(dialog.getByLabel("Город", { exact: true })).toHaveValue(
+  await expect(page).toHaveURL(/\/profile\/edit$/);
+  await expect(settings.getByLabel("Возраст", { exact: true })).toHaveValue(
+    "25",
+  );
+  await expect(settings.getByLabel("Город", { exact: true })).toHaveValue(
     "Казань",
   );
-  await expect(dialog.getByLabel("О себе", { exact: true })).toHaveValue(
+  await expect(settings.getByLabel("О себе", { exact: true })).toHaveValue(
     "Играю по вечерам.",
   );
-  await dialog
+  await settings
     .getByRole("button", { name: "Открыть мой профиль", exact: true })
     .click();
   const profile = page.getByRole("region", {
@@ -1493,25 +1504,31 @@ test("профиль и аватар сохраняются на сервере,
   ).toBeVisible();
   // Те же сведения доступны гостю; баланс в публичный профиль не выводится.
   await page.locator(".profile").click();
-  await dialog.getByRole("button", { name: "Выйти", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
+  await page
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
+  await expect(settings).toHaveCount(0);
   await page.goto("/#/users/buyer");
   await expect(profile.locator(".profile-details")).toHaveText(
     "25 лет · Казань",
   );
   await login(page);
   await page.locator(".profile").click();
+  await page
+    .getByRole("link", { name: "Настройки профиля", exact: true })
+    .click();
   await avatar
     .getByRole("button", { name: "Удалить изображение", exact: true })
     .click();
   await expect(avatar.getByRole("img")).toHaveCount(0);
-  await dialog.getByLabel("Возраст", { exact: true }).fill("");
-  await dialog.getByLabel("Город", { exact: true }).fill("");
-  await dialog.getByLabel("О себе", { exact: true }).fill("");
-  await dialog
+  await settings.getByLabel("Возраст", { exact: true }).fill("");
+  await settings.getByLabel("Город", { exact: true }).fill("");
+  await settings.getByLabel("О себе", { exact: true }).fill("");
+  await settings
     .getByRole("button", { name: "Сохранить профиль", exact: true })
     .click();
-  await expect(dialog.getByRole("status")).toBeVisible();
+  await expect(settings.getByRole("status")).toBeVisible();
   expect(mutations.at(-1)?.body).toEqual({
     age: null,
     city: null,
@@ -1551,7 +1568,10 @@ test("изображения игры и объявления: права в UI,
     "/api/media/game",
   );
   await page.locator(".profile").click();
-  await dialog.getByRole("button", { name: "Выйти", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
   await login(page, "seller");
   await selectGame(page);
   await page
@@ -1619,13 +1639,18 @@ test("изображения игры и объявления: права в UI,
   await expect(
     card.getByRole("img", { name: "Silver Sword", exact: true }),
   ).toHaveAttribute("src", "/api/media/advice");
+  await expect(page).toHaveURL(/\/games\/7$/);
   await page.reload();
-  await selectGame(page);
+  await expect(page).toHaveURL(/\/games\/7$/);
   await expect(
     card.getByRole("img", { name: "Silver Sword", exact: true }),
   ).toBeVisible();
   await page.locator(".profile").click();
-  await dialog.getByRole("button", { name: "Выйти", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
+    .getByRole("button", { name: "Выйти", exact: true })
+    .click();
+  await selectGame(page);
   await page
     .getByRole("button", {
       name: "Открыть объявление Silver Sword",
@@ -2138,7 +2163,7 @@ test("отсутствующий API чата не оставляет стату
 async function logout(page: Page) {
   await page.locator(".profile").click();
   await page
-    .getByRole("dialog")
+    .getByRole("region", { name: "Меню аккаунта", exact: true })
     .getByRole("button", { name: "Выйти", exact: true })
     .click();
 }
@@ -2595,4 +2620,138 @@ test("успешное админ-действие не объявляется �
     "Действие выполнено. Не удалось обновить данные заказа.",
   );
   await expect(page.locator(".toast")).toContainText("Заказ подтверждён");
+});
+
+test("маршруты: разделы, история браузера и обновление страницы", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Мои заказы/ }).click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(
+    page.getByRole("heading", { name: "Мои заказы." }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Мои объявления", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/advices$/);
+  await page.goBack();
+  await expect(
+    page.getByRole("heading", { name: "Мои заказы." }),
+  ).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/advices$/);
+  await page.reload();
+  await expect(
+    page.getByText("Войди, чтобы посмотреть объявления", { exact: true }),
+  ).toBeVisible();
+});
+
+test("маршруты: настройки профиля открываются отдельной страницей и сохраняются после F5", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/");
+  await login(page);
+  await page.locator(".profile").click();
+  const menu = page.getByRole("region", { name: "Меню аккаунта", exact: true });
+  await expect(
+    menu.getByRole("button", { name: "Выйти", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await menu
+    .getByRole("link", { name: "Настройки профиля", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/profile\/edit$/);
+  await expect(menu).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Настройки профиля." }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByLabel("Город", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goForward();
+  await expect(
+    page.getByRole("heading", { name: "Настройки профиля." }),
+  ).toBeVisible();
+});
+
+test("меню аккаунта закрывается по Escape и нажатию вне меню", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/");
+  await login(page);
+  const trigger = page.locator(".profile");
+  const menu = page.getByRole("region", { name: "Меню аккаунта", exact: true });
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.getByRole("heading", { name: "Цифровые товары" }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("маршруты: категория и объявление открываются напрямую", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/games/7");
+  await expect(page.locator(".listing-card")).toHaveCount(2);
+  await page.goto("/games/7/advices/31");
+  await expect(page.getByRole("dialog")).toContainText("Silver Sword");
+  await page.reload();
+  await expect(page.getByRole("dialog")).toContainText("Silver Sword");
+  await page.getByRole("button", { name: "Закрыть окно", exact: true }).click();
+  await expect(page).toHaveURL(/\/games\/7$/);
+  await page.goto("/missing-page");
+  await expect(page.getByRole("alert")).toHaveText("Страница не найдена.");
+});
+
+test("маршруты: заказ восстанавливается после F5 и переходов назад", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/");
+  await login(page);
+  await selectGame(page);
+  await purchase(page);
+  await expect(page).toHaveURL(/\/orders\/73$/);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Заказ #73." })).toBeVisible();
+  await page.getByRole("button", { name: /Мои заказы/ }).click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Заказ #73." })).toBeVisible();
+});
+
+test("настройки профиля: гость входит и возвращается на страницу настроек", async ({
+  page,
+}) => {
+  await server(page);
+  await page.goto("/profile/edit");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Войти в аккаунт", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Имя пользователя", { exact: true }).fill("buyer");
+  await dialog.getByLabel("Пароль", { exact: true }).fill(password);
+  await dialog.getByRole("button", { name: "Войти", exact: true }).click();
+  await expect(page).toHaveURL(/\/profile\/edit$/);
+  await expect(page.getByLabel("Город", { exact: true })).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
