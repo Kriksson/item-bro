@@ -75,7 +75,7 @@ export type MessagePage = { items: ChatMessage[]; hasMore: boolean };
 export type OrderAction =
   "confirm" | "cancel" | "reopen" | "admin-confirm" | "refund";
 export type Page =
-  "market" | "orders" | "selling" | "admin" | "order" | "profile";
+  "market" | "orders" | "selling" | "admin" | "order" | "profile" | "settings";
 export interface Marketplace {
   login(name: string, password: string): Promise<Account>;
   register(name: string, password: string): Promise<Account>;

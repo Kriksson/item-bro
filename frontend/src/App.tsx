@@ -12,7 +12,6 @@ import {
   ImagePlus,
   LayoutGrid,
   LoaderCircle,
-  LogOut,
   Menu,
   Plus,
   Settings2,
@@ -40,15 +39,17 @@ import OrderWorkspace from "./OrderWorkspace";
 import { Logo, Modal } from "./components";
 import { AdviceArtwork, Avatar, ImageEditor } from "./Media";
 import ProfileSettings from "./ProfileSettings";
+import AccountMenu from "./AccountMenu";
 import { money, positiveId, requiredText } from "./storage";
 import Username, { ProfileNavigation } from "./Username";
 import ProfilePage from "./ProfilePage";
 import AdminTrades from "./AdminTrades";
 import SellerRating from "./SellerRating";
+import { readRoute, changeAddress, catalogAddress } from "./routes";
 
 type Dialog =
   | {
-      kind: "login" | "register" | "listing" | "settings" | "new-game";
+      kind: "login" | "register" | "listing" | "new-game";
     }
   | { kind: "buy" | "advice" | "archive-advice"; advice: Advice }
   | { kind: "archive-game" | "game-image"; game: Game };
@@ -66,18 +67,11 @@ const pageNames: Record<Page, string> = {
   admin: "Управление",
   order: "Заказ",
   profile: "Профиль",
+  settings: "Настройки профиля",
 };
 
-function clearProfileAddress() {
-  if (window.location.hash.startsWith("#/users/"))
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search,
-    );
-}
-
 export default function App() {
+  const [route, setRoute] = useState(readRoute);
   const api = useRef(new ApiMarketplace());
   const client = api.current;
   const [account, setAccount] = useState<Account | null>(null);
@@ -87,9 +81,9 @@ export default function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [gamesError, setGamesError] = useState("");
-  const [gameId, setGameId] = useState<number | null>(null);
-  const [page, setPage] = useState<Page>("market");
-  const [pageNumber, setPageNumber] = useState(0);
+  const [gameId, setGameId] = useState<number | null>(route.gameId);
+  const [page, setPage] = useState<Page>(route.page);
+  const [pageNumber, setPageNumber] = useState(route.pageNumber);
   const [data, setData] = useState<AdvicePage>(emptyPage);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -97,7 +91,8 @@ export default function App() {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
-  const [profileName, setProfileName] = useState("");
+  const preloadedOrder = useRef<number | null>(null);
+  const [profileName, setProfileName] = useState(route.profileName);
   const [orderReturnPage, setOrderReturnPage] = useState<"orders" | "admin">(
     "orders",
   );
@@ -111,29 +106,111 @@ export default function App() {
   const isAdmin = account?.role === "ADMIN";
   const [orderRevision, setOrderRevision] = useState(0);
 
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const modalReturn = useRef<string | null>(null);
+
   useEffect(() => {
-    const restoreProfile = () => {
-      const match = /^#\/users\/(.+)$/.exec(window.location.hash);
-      if (!match) {
-        if (!window.location.hash)
-          setPage((previous) => (previous === "profile" ? "market" : previous));
+    const restoreRoute = () => {
+      const legacy = /^#\/users\/(.+)$/.exec(window.location.hash);
+      if (legacy) window.history.replaceState(null, "", `/users/${legacy[1]}`);
+      const next = readRoute();
+      setRoute(next);
+      setPage(next.page);
+      setGameId(next.gameId);
+      setPageNumber(next.pageNumber);
+      setProfileName(next.profileName);
+      if (preloadedOrder.current !== next.orderId)
+        preloadedOrder.current = null;
+      setDialog(null);
+      setFormError("");
+      setRouteError("");
+      setMobileNav(false);
+    };
+    restoreRoute();
+    window.addEventListener("popstate", restoreRoute);
+    window.addEventListener("hashchange", restoreRoute);
+    return () => {
+      window.removeEventListener("popstate", restoreRoute);
+      window.removeEventListener("hashchange", restoreRoute);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRouteError("");
+    setRouteLoading(false);
+    if (authChecking) return;
+    if (route.notFound) {
+      setRouteError("Страница не найдена.");
+      return;
+    }
+    if (route.page === "admin" && !isAdmin) {
+      setRouteError("Этот раздел доступен только администратору.");
+      return;
+    }
+    if (route.orderId) {
+      if (account && preloadedOrder.current === route.orderId) {
+        preloadedOrder.current = null;
         return;
       }
-      try {
-        const username = decodeURIComponent(match[1]);
-        if (username) {
-          setProfileName(username);
-          setPage("profile");
-          setDialog(null);
-        }
-      } catch {
-        /* Некорректная ссылка не открывает профиль. */
+      setActiveOrder(null);
+      if (!account) {
+        setRouteError("Войди в аккаунт, чтобы открыть заказ.");
+        return;
       }
+      setRouteLoading(true);
+      client
+        .order(route.orderId)
+        .then((order) => {
+          if (!cancelled) setActiveOrder(order);
+        })
+        .catch((error) => {
+          if (!cancelled) setRouteError(error.message);
+        })
+        .finally(() => {
+          if (!cancelled) setRouteLoading(false);
+        });
+    } else if (route.adviceId && route.gameId) {
+      setRouteLoading(true);
+      const load = async () => {
+        let index = 0;
+        do {
+          const result = await client.advices(route.gameId!, index);
+          if (cancelled) return;
+          const advice = result.content.find(
+            (item) => item.id === route.adviceId,
+          );
+          if (advice) {
+            setDialog({
+              kind: route.dialog === "buy" ? "buy" : "advice",
+              advice,
+            });
+            return;
+          }
+          if (++index >= result.totalPages) break;
+        } while (!cancelled);
+        throw new Error("Объявление не найдено.");
+      };
+      void load()
+        .catch((error) => {
+          if (!cancelled) setRouteError(error.message);
+        })
+        .finally(() => {
+          if (!cancelled) setRouteLoading(false);
+        });
+    } else if (route.dialog === "listing" && !account) {
+      modalReturn.current = window.location.pathname + window.location.search;
+      setDialog({ kind: "login" });
+    } else if (route.dialog) {
+      setDialog({
+        kind: route.dialog as "login" | "register" | "listing" | "new-game",
+      });
+    }
+    return () => {
+      cancelled = true;
     };
-    restoreProfile();
-    window.addEventListener("hashchange", restoreProfile);
-    return () => window.removeEventListener("hashchange", restoreProfile);
-  }, []);
+  }, [route, authChecking, account?.name, isAdmin, client]);
 
   const open = (next: Dialog) => {
     if (authChecking && (next.kind === "login" || next.kind === "register"))
@@ -145,11 +222,37 @@ export default function App() {
       !isAdmin
     )
       return;
+    const paths: Partial<Record<Dialog["kind"], string>> = {
+      login: "/login",
+      register: "/register",
+      listing: `/advices/new${gameId ? `?gameId=${gameId}` : ""}`,
+      "new-game": "/admin/categories/new",
+    };
+    const path =
+      next.kind === "advice" || next.kind === "buy"
+        ? `/games/${next.advice.game.id}/advices/${next.advice.id}${next.kind === "buy" ? "/buy" : ""}`
+        : paths[next.kind];
+    if (path) {
+      if (!route.dialog)
+        modalReturn.current = window.location.pathname + window.location.search;
+      changeAddress(path);
+    }
     setFormError("");
     setDialog(next);
   };
   const close = () => {
     if (!busy) {
+      if (route.dialog) {
+        changeAddress(
+          modalReturn.current ??
+            (route.page === "selling"
+              ? "/advices"
+              : route.page === "admin"
+                ? "/admin"
+                : catalogAddress("market", route.gameId)),
+        );
+        modalReturn.current = null;
+      }
       setDialog(null);
       setFormError("");
     }
@@ -322,10 +425,28 @@ export default function App() {
       setBusy(false);
     }
   };
+  const logout = () =>
+    work(async () => {
+      await client.logout();
+      setAccount(null);
+      setOrders([]);
+      setActiveOrder(null);
+      setData(emptyPage);
+      setDialog(null);
+      changeAddress("/");
+      notify("Ты вышел из аккаунта.");
+    });
+
   const navigate = (next: Page) => {
     if (next === "admin" && !isAdmin) return;
     setPage(next);
-    if (next !== "profile") clearProfileAddress();
+    const paths = {
+      market: "/",
+      orders: "/orders",
+      selling: "/advices",
+      admin: "/admin",
+    };
+    if (next in paths) changeAddress(paths[next as keyof typeof paths]);
     if (next === "market" || next === "selling") setGameId(null);
     if (next === "market" || next === "orders")
       setRefresh((value) => value + 1);
@@ -339,11 +460,12 @@ export default function App() {
     setDialog(null);
     setFormError("");
     setMobileNav(false);
-    window.location.hash = `/users/${encodeURIComponent(username)}`;
+    changeAddress(`/users/${encodeURIComponent(username)}`);
   };
   const chooseGame = (id: number) => {
     setGameId(id);
     setPageNumber(0);
+    changeAddress(catalogAddress(page, id));
   };
   const submit = (
     event: FormEvent<HTMLFormElement>,
@@ -361,7 +483,8 @@ export default function App() {
       setActiveOrder(order);
       setOrderReturnPage("orders");
       setFocusChat(false);
-      navigate("order");
+      preloadedOrder.current = order.id;
+      changeAddress(`/orders/${order.id}`);
       setDialog(null);
       setRefresh((value) => value + 1);
       notify(`Заказ #${order.id} создан`);
@@ -405,7 +528,8 @@ export default function App() {
       setActiveOrder(fresh);
       setOrderReturnPage(fromAdmin ? "admin" : "orders");
       setFocusChat(chat);
-      navigate("order");
+      preloadedOrder.current = fresh.id;
+      changeAddress(`/orders/${fresh.id}`);
     });
 
   return (
@@ -423,7 +547,7 @@ export default function App() {
           className={`sidebar${mobileNav ? " sidebar-open" : ""}`}
         >
           <a
-            href="#"
+            href="/"
             className="brand"
             aria-label="ItemBro — на главную"
             onClick={(e) => {
@@ -481,11 +605,11 @@ export default function App() {
           )}
           <div className="sidebar-bottom">
             <button
-              className="nav-item muted"
-              onClick={() => open({ kind: "settings" })}
+              className={`nav-item ${page === "settings" ? "active" : "muted"}`}
+              onClick={() => changeAddress("/profile/edit")}
             >
               <Settings2 size={18} />
-              Аккаунт
+              Настройки профиля
             </button>
           </div>
         </aside>
@@ -503,7 +627,7 @@ export default function App() {
                 <Menu />
               </button>
               <a
-                href="#"
+                href="/"
                 className="mobile-brand"
                 aria-label="ItemBro — на главную"
                 onClick={(event) => {
@@ -519,14 +643,6 @@ export default function App() {
               </span>
             </div>
             <div className="topbar-actions">
-              <button
-                className="server-badge"
-                onClick={() => open({ kind: "settings" })}
-              >
-                <span className="small-dot" />
-                Аккаунт
-                <ChevronDown size={12} />
-              </button>
               {account && account.balance !== undefined && (
                 <div className="balance">
                   <Wallet size={17} />
@@ -537,23 +653,13 @@ export default function App() {
               )}
               <span className="topbar-divider" />
               {account ? (
-                <button
-                  className="profile"
-                  aria-label={`Аккаунт ${account.name}`}
-                  onClick={() => open({ kind: "settings" })}
-                >
-                  <Avatar
-                    user={{
-                      username: account.name,
-                      avatarUrl: account.avatarUrl,
-                    }}
-                  />
-                  <Username
-                    user={{ username: account.name, userRole: account.role }}
-                    interactive={false}
-                  />
-                  <ChevronDown size={13} />
-                </button>
+                <AccountMenu
+                  key={account.name}
+                  account={account}
+                  busy={busy}
+                  onSettings={() => changeAddress("/profile/edit")}
+                  onLogout={() => void logout()}
+                />
               ) : (
                 <button
                   className="button button-small"
@@ -569,6 +675,73 @@ export default function App() {
 
           <main>
             <div className="page-content" key={page}>
+              {routeLoading && <p role="status">Загрузка страницы…</p>}
+              {routeError && (
+                <p className="form-error" role="alert">
+                  {routeError}
+                </p>
+              )}
+              {page === "settings" && (
+                <section
+                  className="content-page settings-page"
+                  aria-label="Настройки профиля"
+                >
+                  <div className="section-heading">
+                    <div>
+                      <h1>
+                        Настройки профиля<span className="heading-dot">.</span>
+                      </h1>
+                      <p className="subtle-note">
+                        Аватар и информация, которую видят другие пользователи.
+                      </p>
+                    </div>
+                    {account && (
+                      <button
+                        className="button button-secondary"
+                        onClick={() => openProfile(account.name)}
+                      >
+                        <UserRound size={17} />
+                        Открыть мой профиль
+                      </button>
+                    )}
+                  </div>
+                  {authChecking ? (
+                    <p role="status">Проверяем вход…</p>
+                  ) : account ? (
+                    <fieldset className="settings-card" disabled={busy}>
+                      <ProfileSettings
+                        key={account.name}
+                        account={account}
+                        client={client}
+                        onBusyChange={setBusy}
+                        onUpdated={(updated) => {
+                          setAccount(updated);
+                          setRefresh((value) => value + 1);
+                        }}
+                      />
+                    </fieldset>
+                  ) : (
+                    <div className="settings-card">
+                      <p>Войди в аккаунт, чтобы изменить профиль.</p>
+                      <button
+                        className="button"
+                        onClick={() => open({ kind: "login" })}
+                      >
+                        Войти в аккаунт
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+              {formError &&
+                !dialog &&
+                page !== "orders" &&
+                page !== "order" &&
+                page !== "admin" && (
+                  <p className="form-error" role="alert">
+                    {formError}
+                  </p>
+                )}
               {sessionError && (
                 <div className="session-error" role="alert">
                   <p>{sessionError}</p>
@@ -581,7 +754,7 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {(page === "market" || page === "selling") && (
+              {!route.notFound && (page === "market" || page === "selling") && (
                 <MarketPage
                   key={`${page}-${gameId ?? "games"}-${account?.name ?? "guest"}`}
                   kind={page}
@@ -596,12 +769,11 @@ export default function App() {
                   error={loadError}
                   pageNumber={pageNumber}
                   onChooseGame={chooseGame}
-                  onBack={() => {
-                    setGameId(null);
-                    setPageNumber(0);
-                  }}
+                  onBack={() => changeAddress(catalogAddress(page, null))}
                   onRetry={() => setRefresh((value) => value + 1)}
-                  onPage={setPageNumber}
+                  onPage={(index) =>
+                    changeAddress(catalogAddress(page, gameId, index))
+                  }
                   onCreate={() =>
                     open(account ? { kind: "listing" } : { kind: "login" })
                   }
@@ -781,19 +953,17 @@ export default function App() {
                   ? "Регистрация"
                   : dialog.kind === "listing"
                     ? "Новое объявление"
-                    : dialog.kind === "settings"
-                      ? "Аккаунт"
-                      : dialog.kind === "new-game"
-                        ? "Новая категория"
-                        : dialog.kind === "game-image"
-                          ? dialog.game.name
-                          : dialog.kind === "buy"
-                            ? "Покупка"
-                            : dialog.kind === "advice"
-                              ? "Объявление"
-                              : dialog.kind === "archive-advice"
-                                ? "Архивировать объявление?"
-                                : "Архивировать категорию?"
+                    : dialog.kind === "new-game"
+                      ? "Новая категория"
+                      : dialog.kind === "game-image"
+                        ? dialog.game.name
+                        : dialog.kind === "buy"
+                          ? "Покупка"
+                          : dialog.kind === "advice"
+                            ? "Объявление"
+                            : dialog.kind === "archive-advice"
+                              ? "Архивировать объявление?"
+                              : "Архивировать категорию?"
             }
             onClose={close}
           >
@@ -821,7 +991,8 @@ export default function App() {
                       setAccount(result);
                       setSessionError("");
                       setPage("market");
-                      clearProfileAddress();
+                      changeAddress(modalReturn.current ?? "/");
+                      modalReturn.current = null;
                       setDialog(null);
                       setRefresh((value) => value + 1);
                       notify("Вход выполнен.");
@@ -881,76 +1052,6 @@ export default function App() {
                 </form>
               )}
 
-              {dialog.kind === "settings" && (
-                <div className="settings-content">
-                  <p className="form-intro">
-                    {account ? (
-                      <>
-                        Аккаунт:{" "}
-                        <Username
-                          user={{
-                            username: account.name,
-                            userRole: account.role,
-                          }}
-                        />
-                        .
-                      </>
-                    ) : (
-                      "Вход не выполнен."
-                    )}
-                  </p>
-                  {!account && (
-                    <button
-                      className="button button-full"
-                      onClick={() => open({ kind: "login" })}
-                    >
-                      Войти в аккаунт
-                    </button>
-                  )}
-                  {account && (
-                    <ProfileSettings
-                      account={account}
-                      client={client}
-                      onBusyChange={setBusy}
-                      onUpdated={(updated) => {
-                        setAccount(updated);
-                        setRefresh((value) => value + 1);
-                      }}
-                    />
-                  )}
-                  {account && (
-                    <button
-                      className="button button-full"
-                      onClick={() => openProfile(account.name)}
-                    >
-                      <UserRound size={17} />
-                      Открыть мой профиль
-                    </button>
-                  )}
-                  {account && (
-                    <button
-                      className="button button-secondary button-full"
-                      onClick={() =>
-                        void work(async () => {
-                          await client.logout();
-                          setAccount(null);
-                          setOrders([]);
-                          setActiveOrder(null);
-                          setData(emptyPage);
-                          setDialog(null);
-                          setPage("market");
-                          clearProfileAddress();
-                          notify("Ты вышел из аккаунта.");
-                        })
-                      }
-                    >
-                      <LogOut size={16} />
-                      Выйти
-                    </button>
-                  )}
-                </div>
-              )}
-
               {dialog.kind === "new-game" && (
                 <form
                   onSubmit={(e) =>
@@ -959,6 +1060,7 @@ export default function App() {
                         requiredText(form.get("name")),
                       );
                       rememberGame(game);
+                      changeAddress("/admin");
                       setDialog(null);
                       notify("Категория создана.");
                     })
@@ -994,6 +1096,7 @@ export default function App() {
                       setGameId(advice.game.id);
                       setPageNumber(0);
                       setPage("selling");
+                      changeAddress(catalogAddress("selling", advice.game.id));
                       setRefresh((value) => value + 1);
                       setDialog(null);
                       notify("Объявление опубликовано.");
@@ -1151,6 +1254,10 @@ export default function App() {
                     onClick={() =>
                       void work(async () => {
                         await client.archiveAdvice(dialog.advice.id);
+                        if (route.adviceId)
+                          changeAddress(
+                            catalogAddress("market", dialog.advice.game.id),
+                          );
                         setDialog(null);
                         setRefresh((value) => value + 1);
                         notify("Объявление отправлено в архив.");
@@ -1194,6 +1301,7 @@ export default function App() {
                         if (gameId === dialog.game.id) {
                           setGameId(null);
                           setPageNumber(0);
+                          changeAddress(catalogAddress(page, null));
                         }
                         setDialog(null);
                         setRefresh((value) => value + 1);
